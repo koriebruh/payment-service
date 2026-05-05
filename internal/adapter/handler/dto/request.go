@@ -2,7 +2,7 @@ package dto
 
 type ChargeRequestDTO struct {
 	CustomerID      string `json:"customer_id" validate:"required,uuid"`
-	PaymentMethodID string `json:"payment_method_id" validate:"required,uuid"`
+	PaymentMethodID string `json:"payment_method_id" validate:"required"`
 	Amount          int64  `json:"amount" validate:"required,gt=0"`
 	Currency        string `json:"currency" validate:"required,len=3"`
 	IdempotencyKey  string `json:"-"` // Header

@@ -42,7 +42,6 @@ type RefundResult struct {
 
 type PaymentMethodResult struct {
 	ID   string `json:"id"`
-	Code string `json:"code"`
 	Name string `json:"name"`
 	Type string `json:"type"`
 }

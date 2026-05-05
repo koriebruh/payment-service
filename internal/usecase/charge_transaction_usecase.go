@@ -37,7 +37,7 @@ func NewChargeTransactionUsecase(
 func (u *chargeTransactionUsecase) Execute(ctx context.Context, req dto.ChargeRequest) (*dto.ChargeResult, error) {
 	// Idempotency check logic would go here using u.idempotencyStore
 
-	orderID := fmt.Sprintf("ORDER-%s-%d", req.CustomerID[:8], time.Now().Unix())
+	orderID := fmt.Sprintf("midtrans-txn-%s-%d", req.PaymentMethodID, time.Now().UnixNano())
 
 	trx := &domain.Transaction{
 		ID:              uuid.NewString(),

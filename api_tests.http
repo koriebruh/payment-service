@@ -1,8 +1,8 @@
 ### Environment Variables
 @baseUrl = http://localhost:8080/api/v1
-@paymentMethodId = 550e8400-e29b-41d4-a716-446655440000
+@paymentMethodId = qris
 @customerId = 550e8400-e29b-41d4-a716-446655440001
-@orderId = ORDER-cust-1-1681234567
+@orderId = ORDER-cust-1-168123456700-1777988359
 
 ### 1. Healthcheck (Database & Redis Status)
 GET http://localhost:8080/health

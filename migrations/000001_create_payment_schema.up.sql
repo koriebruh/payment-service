@@ -3,8 +3,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE payment_methods (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    code            VARCHAR(50) UNIQUE NOT NULL,  -- gopay, qris, bca_va
+    id              VARCHAR(50) PRIMARY KEY, -- e.g., qris, gopay
     name            VARCHAR(100) NOT NULL,
     type            VARCHAR(50) NOT NULL,          -- ewallet, bank_transfer, card, qris
     is_active       BOOLEAN NOT NULL DEFAULT true,
@@ -24,7 +23,7 @@ CREATE TABLE transactions (
     id                        UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_id                  VARCHAR(100) UNIQUE NOT NULL,
     customer_id               UUID NOT NULL REFERENCES customers(id),
-    payment_method_id         UUID NOT NULL REFERENCES payment_methods(id),
+    payment_method_id         VARCHAR(50) NOT NULL REFERENCES payment_methods(id),
     amount                    BIGINT NOT NULL,   -- dalam Rupiah, hindari float
     currency                  VARCHAR(3) NOT NULL DEFAULT 'IDR',
     status                    VARCHAR(20) NOT NULL DEFAULT 'pending'

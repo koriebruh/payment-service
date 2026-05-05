@@ -27,7 +27,6 @@ func (u *getActivePaymentMethodsUsecase) Execute(ctx context.Context) ([]*dto.Pa
 	for _, m := range methods {
 		results = append(results, &dto.PaymentMethodResult{
 			ID:   m.ID,
-			Code: m.Code,
 			Name: m.Name,
 			Type: m.Type,
 		})
