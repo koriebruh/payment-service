@@ -46,6 +46,7 @@ type OutboxRepository interface {
 }
 
 type PaymentMethodRepository interface {
+	FindByID(ctx context.Context, id string) (*domain.PaymentMethod, error)
 	FindAllActive(ctx context.Context) ([]*domain.PaymentMethod, error)
 }
 

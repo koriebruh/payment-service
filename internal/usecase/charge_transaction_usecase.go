@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 type chargeTransactionUsecase struct {
 	txManager        port.TxManager
 	transactionRepo  port.TransactionRepository
+	pmRepo           port.PaymentMethodRepository
 	paymentGateway   port.PaymentGatewayPort
 	idempotencyStore idempotency.IdempotencyStore
 }
@@ -23,21 +25,39 @@ type chargeTransactionUsecase struct {
 func NewChargeTransactionUsecase(
 	txManager port.TxManager,
 	transactionRepo port.TransactionRepository,
+	pmRepo port.PaymentMethodRepository,
 	paymentGateway port.PaymentGatewayPort,
 	idempotencyStore idempotency.IdempotencyStore,
 ) port.ChargeTransactionUsecase {
 	return &chargeTransactionUsecase{
 		txManager:        txManager,
 		transactionRepo:  transactionRepo,
+		pmRepo:           pmRepo,
 		paymentGateway:   paymentGateway,
 		idempotencyStore: idempotencyStore,
 	}
 }
 
 func (u *chargeTransactionUsecase) Execute(ctx context.Context, req dto.ChargeRequest) (*dto.ChargeResult, error) {
-	// Idempotency check logic would go here using u.idempotencyStore
+	pm, err := u.pmRepo.FindByID(ctx, req.PaymentMethodID)
+	if err != nil {
+		return nil, domain.NewValidationError(fmt.Sprintf("invalid payment method: %s", req.PaymentMethodID))
+	}
 
-	orderID := fmt.Sprintf("midtrans-txn-%s-%d", req.PaymentMethodID, time.Now().UnixNano())
+	// Extract provider from JSONB config. Default to midtrans if not found.
+	provider := "midtrans" // fallback
+	if len(pm.Config) > 0 {
+		var configMap map[string]interface{}
+		if err := json.Unmarshal(pm.Config, &configMap); err == nil {
+			if providerVal, ok := configMap["provider"]; ok {
+				if pStr, ok := providerVal.(string); ok {
+					provider = pStr
+				}
+			}
+		}
+	}
+
+	orderID := fmt.Sprintf("%s-txn-%s-%d", provider, req.PaymentMethodID, time.Now().UnixNano())
 
 	trx := &domain.Transaction{
 		ID:              uuid.NewString(),

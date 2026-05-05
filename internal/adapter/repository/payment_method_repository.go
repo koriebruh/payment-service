@@ -17,6 +17,15 @@ func NewPaymentMethodRepository(db *gorm.DB) port.PaymentMethodRepository {
 	return &paymentMethodRepository{db: db}
 }
 
+func (r *paymentMethodRepository) FindByID(ctx context.Context, id string) (*domain.PaymentMethod, error) {
+	var method domain.PaymentMethod
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&method).Error
+	if err != nil {
+		return nil, err
+	}
+	return &method, nil
+}
+
 func (r *paymentMethodRepository) FindAllActive(ctx context.Context) ([]*domain.PaymentMethod, error) {
 	var methods []*domain.PaymentMethod
 	err := r.db.WithContext(ctx).Where("is_active = ?", true).Find(&methods).Error
