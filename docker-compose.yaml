@@ -90,12 +90,51 @@ services:
     networks:
       - payment-network
 
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheusdata:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - payment-network
+    depends_on:
+      - payment-service
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafanadata:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - payment-network
+    depends_on:
+      - prometheus
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    networks:
+      - payment-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:
   zookeeperdata:
   zookeeperlog:
   kafkadata:
+  prometheusdata:
+  grafanadata:
 
 networks:
   payment-network:
