@@ -1,0 +1,37 @@
+### Environment Variables
+@baseUrl = http://localhost:8080/api/v1
+@paymentMethodId = 550e8400-e29b-41d4-a716-446655440000
+@customerId = 550e8400-e29b-41d4-a716-446655440001
+@orderId = ORDER-cust-1-1681234567
+
+### 1. Healthcheck Metrics (Prometheus)
+GET http://localhost:8080/metrics
+
+### 2. Create Payment (Charge)
+POST {{baseUrl}}/payments/charge
+Content-Type: application/json
+X-Idempotency-Key: idem-charge-test-001
+
+{
+    "customer_id": "{{customerId}}",
+    "payment_method_id": "{{paymentMethodId}}",
+    "amount": 100000,
+    "currency": "IDR"
+}
+
+### 3. Midtrans Webhook Callback (Simulate Settlement)
+# Note: You need to generate a valid signature_key matching your MIDTRANS_SERVER_KEY 
+# for this to return a 200 OK. If the signature is invalid, the service will reject it.
+# Formula: SHA512(order_id + status_code + gross_amount + server_key)
+POST {{baseUrl}}/payments/webhook/midtrans
+Content-Type: application/json
+
+{
+    "transaction_id": "midtrans-txn-12345",
+    "order_id": "{{orderId}}",
+    "gross_amount": "100000.00",
+    "status_code": "200",
+    "fraud_status": "accept",
+    "transaction_status": "settlement",
+    "signature_key": "simulate-invalid-signature-here-for-test"
+}
