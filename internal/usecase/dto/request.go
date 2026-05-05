@@ -20,3 +20,10 @@ type WebhookPayload struct {
 	SignatureKey  string
 	RawPayload    string
 }
+
+type RefundRequest struct {
+	OrderID        string
+	Amount         int64
+	Reason         string
+	IdempotencyKey string
+}

@@ -14,16 +14,26 @@ import (
 )
 
 type PaymentHandler struct {
-	chargeUsecase port.ChargeTransactionUsecase
-	validator     *validator.Validate
-	factory       *response.ApiResponseFactory
+	chargeUsecase    port.ChargeTransactionUsecase
+	getStatusUsecase port.GetTransactionStatusUsecase
+	refundUsecase    port.RefundTransactionUsecase
+	validator        *validator.Validate
+	factory          *response.ApiResponseFactory
 }
 
-func NewPaymentHandler(usecase port.ChargeTransactionUsecase, validate *validator.Validate, factory *response.ApiResponseFactory) *PaymentHandler {
+func NewPaymentHandler(
+	chargeUsecase port.ChargeTransactionUsecase,
+	getStatusUsecase port.GetTransactionStatusUsecase,
+	refundUsecase port.RefundTransactionUsecase,
+	validate *validator.Validate,
+	factory *response.ApiResponseFactory,
+) *PaymentHandler {
 	return &PaymentHandler{
-		chargeUsecase: usecase,
-		validator:     validate,
-		factory:       factory,
+		chargeUsecase:    chargeUsecase,
+		getStatusUsecase: getStatusUsecase,
+		refundUsecase:    refundUsecase,
+		validator:        validate,
+		factory:          factory,
 	}
 }
 
@@ -83,4 +93,80 @@ func (h *PaymentHandler) Charge(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(h.factory.Success(requestID, "CHARGE_SUCCESS", "charge initiated", respDTO))
+}
+
+func (h *PaymentHandler) GetStatus(c *fiber.Ctx) error {
+	requestID, _ := c.Locals("request_id").(string)
+	orderID := c.Params("order_id")
+
+	if orderID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(
+			h.factory.Error(requestID, domain.NewValidationError("order_id parameter is required")),
+		)
+	}
+
+	result, err := h.getStatusUsecase.Execute(c.Context(), orderID)
+	if err != nil {
+		var appErr *domain.AppError
+		if errors.As(err, &appErr) {
+			return c.Status(appErr.HTTPStatus).JSON(h.factory.Error(requestID, appErr))
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(h.factory.Error(requestID, domain.NewInternalError(err)))
+	}
+
+	return c.Status(fiber.StatusOK).JSON(h.factory.Success(requestID, "FETCH_STATUS_SUCCESS", "success fetch transaction status", result))
+}
+
+// Struct for refund request parser
+type RefundRequestPayload struct {
+	Amount int64  `json:"amount" validate:"required,gt=0"`
+	Reason string `json:"reason" validate:"required"`
+}
+
+func (h *PaymentHandler) Refund(c *fiber.Ctx) error {
+	requestID, _ := c.Locals("request_id").(string)
+	orderID := c.Params("order_id")
+
+	if orderID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(
+			h.factory.Error(requestID, domain.NewValidationError("order_id parameter is required")),
+		)
+	}
+
+	var reqPayload RefundRequestPayload
+	if err := c.BodyParser(&reqPayload); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(
+			h.factory.Error(requestID, domain.NewValidationError("invalid request body")),
+		)
+	}
+
+	if err := h.validator.Struct(reqPayload); err != nil {
+		fields := make(map[string]string)
+		for _, err := range err.(validator.ValidationErrors) {
+			fields[err.Field()] = err.Tag()
+		}
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(
+			h.factory.ValidationError(requestID, fields),
+		)
+	}
+
+	idempotencyKey := c.Get("X-Idempotency-Key")
+
+	req := usecase_dto.RefundRequest{
+		OrderID:        orderID,
+		Amount:         reqPayload.Amount,
+		Reason:         reqPayload.Reason,
+		IdempotencyKey: idempotencyKey,
+	}
+
+	result, err := h.refundUsecase.Execute(c.Context(), req)
+	if err != nil {
+		var appErr *domain.AppError
+		if errors.As(err, &appErr) {
+			return c.Status(appErr.HTTPStatus).JSON(h.factory.Error(requestID, appErr))
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(h.factory.Error(requestID, domain.NewInternalError(err)))
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(h.factory.Success(requestID, "REFUND_INITIATED", "refund initiated successfully", result))
 }

@@ -29,6 +29,7 @@ type WebhookLogRepository interface {
 
 type PaymentGatewayPort interface {
 	CreateTransaction(ctx context.Context, t *domain.Transaction, c *domain.Customer) (*domain.Transaction, error)
+	RefundTransaction(ctx context.Context, orderID string, refund *domain.Refund) (*domain.Refund, error)
 }
 
 type EventPublisher interface {
@@ -40,4 +41,13 @@ type OutboxRepository interface {
 	FindPendingEvents(ctx context.Context, limit int) ([]*domain.OutboxEvent, error)
 	MarkAsPublished(ctx context.Context, tx Tx, ids []string) error
 	MarkAsFailed(ctx context.Context, tx Tx, id string) error
+}
+
+type PaymentMethodRepository interface {
+	FindAllActive(ctx context.Context) ([]*domain.PaymentMethod, error)
+}
+
+type RefundRepository interface {
+	Save(ctx context.Context, tx Tx, r *domain.Refund) error
+	Update(ctx context.Context, tx Tx, r *domain.Refund) error
 }

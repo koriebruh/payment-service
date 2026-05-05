@@ -3,7 +3,10 @@ package gateway
 import (
 	"context"
 
+	"encoding/json"
+
 	"github.com/midtrans/midtrans-go"
+	"github.com/midtrans/midtrans-go/coreapi"
 	"github.com/midtrans/midtrans-go/snap"
 
 	"github.com/koriebruh/payment-service/config"
@@ -13,6 +16,7 @@ import (
 
 type midtransClient struct {
 	snapClient snap.Client
+	coreClient coreapi.Client
 }
 
 func NewMidtransClient(cfg *config.Config) port.PaymentGatewayPort {
@@ -26,8 +30,12 @@ func NewMidtransClient(cfg *config.Config) port.PaymentGatewayPort {
 	var snapClient snap.Client
 	snapClient.New(cfg.Midtrans.ServerKey, envType)
 
+	var coreClient coreapi.Client
+	coreClient.New(cfg.Midtrans.ServerKey, envType)
+
 	return &midtransClient{
 		snapClient: snapClient,
+		coreClient: coreClient,
 	}
 }
 
@@ -53,4 +61,30 @@ func (m *midtransClient) CreateTransaction(ctx context.Context, t *domain.Transa
 	t.PaymentURL = &snapResp.RedirectURL
 
 	return t, nil
+}
+
+func (m *midtransClient) RefundTransaction(ctx context.Context, orderID string, refund *domain.Refund) (*domain.Refund, error) {
+	reason := "Refund request"
+	if refund.Reason != nil {
+		reason = *refund.Reason
+	}
+
+	req := &coreapi.RefundReq{
+		RefundKey: refund.ID,
+		Amount:    refund.Amount,
+		Reason:    reason,
+	}
+
+	resp, midtransErr := m.coreClient.RefundTransaction(orderID, req)
+	if midtransErr != nil {
+		return nil, midtransErr
+	}
+
+	refund.Status = domain.RefundStatusSuccess
+	refund.MidtransRefundKey = &req.RefundKey
+
+	rawResp, _ := json.Marshal(resp)
+	refund.MidtransResponse = rawResp
+
+	return refund, nil
 }

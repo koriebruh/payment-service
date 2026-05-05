@@ -71,6 +71,14 @@ func (m *MockPaymentGateway) CreateTransaction(ctx context.Context, t *domain.Tr
 	return nil, args.Error(1)
 }
 
+func (m *MockPaymentGateway) RefundTransaction(ctx context.Context, orderID string, refund *domain.Refund) (*domain.Refund, error) {
+	args := m.Called(ctx, orderID, refund)
+	if args.Get(0) != nil {
+		return args.Get(0).(*domain.Refund), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func TestChargeTransactionUsecase_Success(t *testing.T) {
 	txManager := new(MockTxManager)
 	trxRepo := new(MockTransactionRepository)

@@ -35,3 +35,20 @@ Content-Type: application/json
     "transaction_status": "settlement",
     "signature_key": "simulate-invalid-signature-here-for-test"
 }
+
+### 4. Check Transaction Status
+GET {{baseUrl}}/payments/{{orderId}}
+
+### 5. Refund Transaction
+POST {{baseUrl}}/payments/{{orderId}}/refund
+Content-Type: application/json
+X-Idempotency-Key: idem-refund-test-001
+
+{
+    "amount": 50000,
+    "reason": "Customer requested refund"
+}
+
+### 6. Get Active Payment Methods
+GET {{baseUrl}}/payment-methods
+
