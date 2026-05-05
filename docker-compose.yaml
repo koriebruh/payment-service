@@ -14,7 +14,7 @@ services:
       - DB_HOST=postgres
       - KAFKA_BROKERS=kafka:9092
       - REDIS_HOST=redis
-      - OTEL_ENDPOINT=jaeger:4317
+      - OTEL_ENDPOINT=otel-collector:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,6 +89,20 @@ services:
       - "4318:4318"   # OTLP HTTP
     networks:
       - payment-network
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./config/otel-collector.yml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+      - "8889:8889" # Prometheus metrics exporter
+    networks:
+      - payment-network
+    depends_on:
+      - jaeger
 
   prometheus:
     image: prom/prometheus:v2.51.0
