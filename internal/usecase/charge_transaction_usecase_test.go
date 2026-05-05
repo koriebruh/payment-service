@@ -11,23 +11,25 @@ import (
 	"github.com/koriebruh/payment-service/internal/domain"
 	"github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
+	"github.com/koriebruh/payment-service/pkg/idempotency"
 )
 
-// MockTxManager
+// ─── Mock: TxManager ────────────────────────────────────────────────────────
+
 type MockTxManager struct {
 	mock.Mock
 }
 
 func (m *MockTxManager) WithTx(ctx context.Context, fn func(tx port.Tx) error) error {
 	args := m.Called(ctx)
-	// Execute the function with a dummy transaction if no error is set to fail
 	if args.Error(0) == nil {
 		return fn(nil)
 	}
 	return args.Error(0)
 }
 
-// MockTransactionRepository
+// ─── Mock: TransactionRepository ────────────────────────────────────────────
+
 type MockTransactionRepository struct {
 	mock.Mock
 }
@@ -66,7 +68,8 @@ func (m *MockTransactionRepository) Update(ctx context.Context, tx port.Tx, t *d
 	return args.Error(0)
 }
 
-// MockPaymentGateway
+// ─── Mock: PaymentGateway ────────────────────────────────────────────────────
+
 type MockPaymentGateway struct {
 	mock.Mock
 }
@@ -92,7 +95,8 @@ func (m *MockPaymentGateway) CancelTransaction(ctx context.Context, orderID stri
 	return args.Error(0)
 }
 
-// MockPaymentMethodRepository
+// ─── Mock: PaymentMethodRepository ──────────────────────────────────────────
+
 type MockPaymentMethodRepository struct {
 	mock.Mock
 }
@@ -113,56 +117,68 @@ func (m *MockPaymentMethodRepository) FindAllActive(ctx context.Context) ([]*dom
 	return nil, args.Error(1)
 }
 
-// MockIdempotencyStore
+// ─── Mock: IdempotencyStore ──────────────────────────────────────────────────
+// Matches the real idempotency.IdempotencyStore interface exactly.
+
 type MockIdempotencyStore struct {
 	mock.Mock
 }
 
-func (m *MockIdempotencyStore) Get(ctx context.Context, key string) (string, error) {
+func (m *MockIdempotencyStore) Get(ctx context.Context, key string) (*idempotency.IdempotencyRecord, error) {
 	args := m.Called(ctx, key)
-	return args.String(0), args.Error(1)
+	if args.Get(0) != nil {
+		return args.Get(0).(*idempotency.IdempotencyRecord), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
-func (m *MockIdempotencyStore) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
-	args := m.Called(ctx, key, value, ttl)
+func (m *MockIdempotencyStore) Set(ctx context.Context, key string, record idempotency.IdempotencyRecord, ttl time.Duration) error {
+	args := m.Called(ctx, key, record, ttl)
 	return args.Error(0)
 }
 
-func (m *MockIdempotencyStore) SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error) {
-	args := m.Called(ctx, key, value, ttl)
-	return args.Bool(0), args.Error(1)
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+func buildTestPaymentMethod(id string) *domain.PaymentMethod {
+	return &domain.PaymentMethod{
+		ID:     id,
+		Name:   "QRIS",
+		Type:   "E-WALLET",
+		Config: []byte(`{"provider": "midtrans"}`),
+	}
 }
 
-func (m *MockIdempotencyStore) Delete(ctx context.Context, key string) error {
-	args := m.Called(ctx, key)
-	return args.Error(0)
+func buildTestChargeRequest() dto.ChargeRequest {
+	return dto.ChargeRequest{
+		CustomerID:      "customer-1",
+		PaymentMethodID: "qris",
+		Amount:          100000,
+		Currency:        "IDR",
+		IdempotencyKey:  "idem-key-001",
+		TraceID:         "trace-001",
+	}
 }
 
+// ─── Tests ────────────────────────────────────────────────────────────────────
 
+// TestChargeTransactionUsecase_Success: happy path — full charge flow.
 func TestChargeTransactionUsecase_Success(t *testing.T) {
 	txManager := new(MockTxManager)
 	trxRepo := new(MockTransactionRepository)
 	pmRepo := new(MockPaymentMethodRepository)
 	gateway := new(MockPaymentGateway)
-	idempotencyStore := new(MockIdempotencyStore)
-	
-	usecase := NewChargeTransactionUsecase(txManager, trxRepo, pmRepo, gateway, idempotencyStore) 
+	idemStore := new(MockIdempotencyStore)
 
-	
-	req := dto.ChargeRequest{
-		CustomerID:      "customer-1",
-		PaymentMethodID: "pm-1",
-		Amount:          100000,
-		Currency:        "IDR",
-		IdempotencyKey:  "idem-1",
-	}
+	uc := NewChargeTransactionUsecase(txManager, trxRepo, pmRepo, gateway, idemStore)
+
+	req := buildTestChargeRequest()
 
 	snapToken := "snap-token-123"
-	paymentURL := "https://midtrans.com/pay"
+	paymentURL := "https://app.sandbox.midtrans.com/snap/v4/redirection/abc"
 
-	expectedTrx := &domain.Transaction{
+	returnedTrx := &domain.Transaction{
 		ID:              "trx-123",
-		OrderID:         "ORDER-cust-1-123",
+		OrderID:         "ORDER-midtrans-qris-999",
 		CustomerID:      req.CustomerID,
 		PaymentMethodID: req.PaymentMethodID,
 		Amount:          req.Amount,
@@ -173,27 +189,87 @@ func TestChargeTransactionUsecase_Success(t *testing.T) {
 		CreatedAt:       time.Now(),
 	}
 
-	pm := &domain.PaymentMethod{
-		ID:     req.PaymentMethodID,
-		Name:   "QRIS",
-		Type:   "E-WALLET",
-		Config: []byte(`{"provider": "midtrans"}`),
-	}
-
-	pmRepo.On("FindByID", mock.Anything, req.PaymentMethodID).Return(pm, nil)
-	gateway.On("CreateTransaction", mock.Anything, mock.AnythingOfType("*domain.Transaction"), mock.AnythingOfType("*domain.Customer")).Return(expectedTrx, nil)
+	// 1. No cached idempotency record
+	idemStore.On("Get", mock.Anything, req.IdempotencyKey).Return(nil, assert.AnError)
+	// 2. Payment method lookup
+	pmRepo.On("FindByID", mock.Anything, req.PaymentMethodID).Return(buildTestPaymentMethod(req.PaymentMethodID), nil)
+	// 3. Gateway call
+	gateway.On("CreateTransaction", mock.Anything, mock.AnythingOfType("*domain.Transaction"), mock.AnythingOfType("*domain.Customer")).Return(returnedTrx, nil)
+	// 4. DB persist
 	txManager.On("WithTx", mock.Anything).Return(nil)
 	trxRepo.On("Save", mock.Anything, mock.Anything, mock.AnythingOfType("*domain.Transaction")).Return(nil)
+	// 5. Cache result
+	idemStore.On("Set", mock.Anything, req.IdempotencyKey, mock.AnythingOfType("idempotency.IdempotencyRecord"), idempotencyTTL).Return(nil)
 
-
-	res, err := usecase.Execute(context.Background(), req)
+	res, err := uc.Execute(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "trx-123", res.TransactionID)
-	assert.Equal(t, domain.StatusPending, domain.TransactionStatus(res.Status))
-	
+	assert.Equal(t, string(domain.StatusPending), res.Status)
+	assert.NotNil(t, res.SnapToken)
+	assert.NotNil(t, res.PaymentURL)
+
+	idemStore.AssertExpectations(t)
+	pmRepo.AssertExpectations(t)
 	gateway.AssertExpectations(t)
 	txManager.AssertExpectations(t)
 	trxRepo.AssertExpectations(t)
+}
+
+// TestChargeTransactionUsecase_IdempotencyHit: duplicate request returns cached result immediately.
+func TestChargeTransactionUsecase_IdempotencyHit(t *testing.T) {
+	txManager := new(MockTxManager)
+	trxRepo := new(MockTransactionRepository)
+	pmRepo := new(MockPaymentMethodRepository)
+	gateway := new(MockPaymentGateway)
+	idemStore := new(MockIdempotencyStore)
+
+	uc := NewChargeTransactionUsecase(txManager, trxRepo, pmRepo, gateway, idemStore)
+
+	req := buildTestChargeRequest()
+
+	// Simulate a previously cached result
+	cachedPayload := []byte(`{"transaction_id":"trx-cached","order_id":"ORDER-midtrans-qris-111","status":"pending","created_at":"2026-01-01T00:00:00Z"}`)
+	cached := &idempotency.IdempotencyRecord{
+		Key:        req.IdempotencyKey,
+		StatusCode: 201,
+		Response:   cachedPayload,
+	}
+
+	idemStore.On("Get", mock.Anything, req.IdempotencyKey).Return(cached, nil)
+
+	res, err := uc.Execute(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, "trx-cached", res.TransactionID)
+
+	// Gateway and DB must NOT be called on idempotency hit
+	gateway.AssertNotCalled(t, "CreateTransaction")
+	txManager.AssertNotCalled(t, "WithTx")
+	trxRepo.AssertNotCalled(t, "Save")
+}
+
+// TestChargeTransactionUsecase_InvalidPaymentMethod: returns domain error when pm not found.
+func TestChargeTransactionUsecase_InvalidPaymentMethod(t *testing.T) {
+	txManager := new(MockTxManager)
+	trxRepo := new(MockTransactionRepository)
+	pmRepo := new(MockPaymentMethodRepository)
+	gateway := new(MockPaymentGateway)
+	idemStore := new(MockIdempotencyStore)
+
+	uc := NewChargeTransactionUsecase(txManager, trxRepo, pmRepo, gateway, idemStore)
+
+	req := buildTestChargeRequest()
+	req.PaymentMethodID = "unknown-method"
+
+	idemStore.On("Get", mock.Anything, req.IdempotencyKey).Return(nil, assert.AnError)
+	pmRepo.On("FindByID", mock.Anything, req.PaymentMethodID).Return(nil, assert.AnError)
+
+	res, err := uc.Execute(context.Background(), req)
+
+	assert.Nil(t, res)
+	assert.Error(t, err)
+	gateway.AssertNotCalled(t, "CreateTransaction")
 }
