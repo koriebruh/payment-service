@@ -19,6 +19,9 @@ RUN apk add --no-cache curl \
 # Run stage
 FROM alpine:latest
 
+# Install make and postgresql-client
+RUN apk add --no-cache make postgresql-client
+
 WORKDIR /app
 
 # Copy binary and migrations

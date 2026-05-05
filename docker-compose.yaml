@@ -6,20 +6,15 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8080}:8080"
+    env_file:
+      - .env
     environment:
-      - APP_NAME=payment-service
-      - APP_ENV=development
+      # Override host variables for Docker networking
       - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=payment_db
-      - DB_USER=payment_user
-      - DB_PASSWORD=payment_password
       - KAFKA_BROKERS=kafka:9092
       - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - MIDTRANS_SERVER_KEY=${MIDTRANS_SERVER_KEY:-SB-Mid-server-XXXXX}
-      - OTEL_ENABLED=false
+      - OTEL_ENDPOINT=jaeger:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,15 +28,15 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_DB=payment_db
-      - POSTGRES_USER=payment_user
-      - POSTGRES_PASSWORD=payment_password
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U payment_user -d payment_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -51,7 +46,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redisdata:/data
     networks:
@@ -81,6 +76,17 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     volumes:
       - kafkadata:/var/lib/kafka/data
+    networks:
+      - payment-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
     networks:
       - payment-network
 
