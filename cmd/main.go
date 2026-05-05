@@ -118,6 +118,7 @@ func main() {
 	paymentHandler := handler.NewPaymentHandler(chargeUsecase, getStatusUsecase, refundUsecase, cancelUsecase, getListUsecase, validate, respFactory)
 	webhookHandler := handler.NewWebhookHandler(webhookUsecase, respFactory)
 	paymentMethodHandler := handler.NewPaymentMethodHandler(getPaymentMethodsUsecase, respFactory)
+	healthHandler := handler.NewHealthHandler(db, redisClient)
 
 	// 11. Setup Fiber
 	app := fiber.New(fiber.Config{
@@ -142,6 +143,8 @@ func main() {
 	})
 
 	// Routes
+	app.Get("/health", healthHandler.Check)
+
 	api := app.Group("/api/v1")
 	
 	pm := api.Group("/payment-methods")
