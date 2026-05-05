@@ -159,7 +159,6 @@ func buildTestChargeRequest() dto.ChargeRequest {
 	}
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
 
 // TestChargeTransactionUsecase_Success: happy path — full charge flow.
 func TestChargeTransactionUsecase_Success(t *testing.T) {
@@ -189,16 +188,11 @@ func TestChargeTransactionUsecase_Success(t *testing.T) {
 		CreatedAt:       time.Now(),
 	}
 
-	// 1. No cached idempotency record
 	idemStore.On("Get", mock.Anything, req.IdempotencyKey).Return(nil, assert.AnError)
-	// 2. Payment method lookup
 	pmRepo.On("FindByID", mock.Anything, req.PaymentMethodID).Return(buildTestPaymentMethod(req.PaymentMethodID), nil)
-	// 3. Gateway call
 	gateway.On("CreateTransaction", mock.Anything, mock.AnythingOfType("*domain.Transaction"), mock.AnythingOfType("*domain.Customer")).Return(returnedTrx, nil)
-	// 4. DB persist
 	txManager.On("WithTx", mock.Anything).Return(nil)
 	trxRepo.On("Save", mock.Anything, mock.Anything, mock.AnythingOfType("*domain.Transaction")).Return(nil)
-	// 5. Cache result
 	idemStore.On("Set", mock.Anything, req.IdempotencyKey, mock.AnythingOfType("idempotency.IdempotencyRecord"), idempotencyTTL).Return(nil)
 
 	res, err := uc.Execute(context.Background(), req)
