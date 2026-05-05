@@ -27,6 +27,8 @@ services:
         condition: service_started
       redis:
         condition: service_started
+    networks:
+      - payment-network
 
   postgres:
     image: postgres:15-alpine
@@ -36,22 +38,35 @@ services:
       - POSTGRES_PASSWORD=payment_password
     ports:
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U payment_user -d payment_db"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - payment-network
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - payment-network
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeperdata:/var/lib/zookeeper/data
+      - zookeeperlog:/var/lib/zookeeper/log
+    networks:
+      - payment-network
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
@@ -64,3 +79,18 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    networks:
+      - payment-network
+
+volumes:
+  pgdata:
+  redisdata:
+  zookeeperdata:
+  zookeeperlog:
+  kafkadata:
+
+networks:
+  payment-network:
+    driver: bridge
