@@ -57,7 +57,8 @@ func (u *chargeTransactionUsecase) Execute(ctx context.Context, req dto.ChargeRe
 		}
 	}
 
-	orderID := fmt.Sprintf("%s-txn-%s-%d", provider, req.PaymentMethodID, time.Now().UnixNano())
+	// Create a clear order ID: ORDER-{provider}-{method}-{timestamp}
+	orderID := fmt.Sprintf("ORDER-%s-%s-%d", provider, req.PaymentMethodID, time.Now().UnixNano())
 
 	trx := &domain.Transaction{
 		ID:              uuid.NewString(),
