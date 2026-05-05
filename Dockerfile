@@ -17,7 +17,7 @@ RUN apk add --no-cache curl \
     && mv migrate /usr/local/bin/migrate
 
 # Run stage
-FROM alpine:latest
+FROM alpine:3.19
 
 # Install make and postgresql-client
 RUN apk add --no-cache make postgresql-client
