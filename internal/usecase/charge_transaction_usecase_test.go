@@ -92,12 +92,62 @@ func (m *MockPaymentGateway) CancelTransaction(ctx context.Context, orderID stri
 	return args.Error(0)
 }
 
+// MockPaymentMethodRepository
+type MockPaymentMethodRepository struct {
+	mock.Mock
+}
+
+func (m *MockPaymentMethodRepository) FindByID(ctx context.Context, id string) (*domain.PaymentMethod, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) != nil {
+		return args.Get(0).(*domain.PaymentMethod), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockPaymentMethodRepository) FindAllActive(ctx context.Context) ([]*domain.PaymentMethod, error) {
+	args := m.Called(ctx)
+	if args.Get(0) != nil {
+		return args.Get(0).([]*domain.PaymentMethod), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+// MockIdempotencyStore
+type MockIdempotencyStore struct {
+	mock.Mock
+}
+
+func (m *MockIdempotencyStore) Get(ctx context.Context, key string) (string, error) {
+	args := m.Called(ctx, key)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockIdempotencyStore) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
+	args := m.Called(ctx, key, value, ttl)
+	return args.Error(0)
+}
+
+func (m *MockIdempotencyStore) SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error) {
+	args := m.Called(ctx, key, value, ttl)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockIdempotencyStore) Delete(ctx context.Context, key string) error {
+	args := m.Called(ctx, key)
+	return args.Error(0)
+}
+
+
 func TestChargeTransactionUsecase_Success(t *testing.T) {
 	txManager := new(MockTxManager)
 	trxRepo := new(MockTransactionRepository)
+	pmRepo := new(MockPaymentMethodRepository)
 	gateway := new(MockPaymentGateway)
+	idempotencyStore := new(MockIdempotencyStore)
 	
-	usecase := NewChargeTransactionUsecase(txManager, trxRepo, gateway, nil) // passing nil for idempotency for now
+	usecase := NewChargeTransactionUsecase(txManager, trxRepo, pmRepo, gateway, idempotencyStore) 
+
 	
 	req := dto.ChargeRequest{
 		CustomerID:      "customer-1",
@@ -123,9 +173,18 @@ func TestChargeTransactionUsecase_Success(t *testing.T) {
 		CreatedAt:       time.Now(),
 	}
 
+	pm := &domain.PaymentMethod{
+		ID:     req.PaymentMethodID,
+		Name:   "QRIS",
+		Type:   "E-WALLET",
+		Config: []byte(`{"provider": "midtrans"}`),
+	}
+
+	pmRepo.On("FindByID", mock.Anything, req.PaymentMethodID).Return(pm, nil)
 	gateway.On("CreateTransaction", mock.Anything, mock.AnythingOfType("*domain.Transaction"), mock.AnythingOfType("*domain.Customer")).Return(expectedTrx, nil)
 	txManager.On("WithTx", mock.Anything).Return(nil)
 	trxRepo.On("Save", mock.Anything, mock.Anything, mock.AnythingOfType("*domain.Transaction")).Return(nil)
+
 
 	res, err := usecase.Execute(context.Background(), req)
 
