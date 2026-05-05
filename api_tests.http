@@ -36,10 +36,27 @@ Content-Type: application/json
     "signature_key": "simulate-invalid-signature-here-for-test"
 }
 
-### 4. Check Transaction Status
+### 4. Midtrans Webhook Callback (Simulate QRIS Pending/Created)
+POST {{baseUrl}}/payments/webhook/midtrans
+Content-Type: application/json
+
+{
+    "transaction_id": "midtrans-txn-qris-123",
+    "order_id": "{{orderId}}",
+    "gross_amount": "100000.00",
+    "status_code": "201",
+    "fraud_status": "accept",
+    "transaction_status": "pending",
+    "payment_type": "qris",
+    "acquirer": "gopay",
+    "qr_string": "00020101021126650016ID.CO.GOJEK.WWW01189360091421330349890214081048698188150303UMO51430014ID.CO.QRIS.WWW0215ID10190000000000303UMO520454995303IDR54061000005802ID5919Toko Maju Terus6007Jakarta6105123456254011832049103984920485903140510123456789063046C49",
+    "signature_key": "simulate-invalid-signature-here-for-test"
+}
+
+### 5. Check Transaction Status (To see QRIS / VA Payment Details)
 GET {{baseUrl}}/payments/{{orderId}}
 
-### 5. Refund Transaction
+### 6. Refund Transaction
 POST {{baseUrl}}/payments/{{orderId}}/refund
 Content-Type: application/json
 X-Idempotency-Key: idem-refund-test-001
@@ -49,6 +66,13 @@ X-Idempotency-Key: idem-refund-test-001
     "reason": "Customer requested refund"
 }
 
-### 6. Get Active Payment Methods
+### 7. Get Active Payment Methods
 GET {{baseUrl}}/payment-methods
+
+### 8. List Transactions
+GET {{baseUrl}}/payments?limit=10&offset=0
+
+### 9. Cancel Transaction
+POST {{baseUrl}}/payments/{{orderId}}/cancel
+
 

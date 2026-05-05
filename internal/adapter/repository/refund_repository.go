@@ -26,3 +26,9 @@ func (r *refundRepository) Update(ctx context.Context, tx port.Tx, refund *domai
 	db := GetGormDB(r.db, tx)
 	return db.WithContext(ctx).Save(refund).Error
 }
+
+func (r *refundRepository) FindByTransactionID(ctx context.Context, transactionID string) ([]*domain.Refund, error) {
+	var refunds []*domain.Refund
+	err := r.db.WithContext(ctx).Where("transaction_id = ?", transactionID).Order("created_at DESC").Find(&refunds).Error
+	return refunds, err
+}

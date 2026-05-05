@@ -30,14 +30,33 @@ func (r *transactionRepository) FindByID(ctx context.Context, id string) (*domai
 }
 
 func (r *transactionRepository) FindByOrderID(ctx context.Context, orderID string) (*domain.Transaction, error) {
-	var trx domain.Transaction
-	if err := r.db.WithContext(ctx).Where("order_id = ?", orderID).First(&trx).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	var t domain.Transaction
+	err := r.db.WithContext(ctx).Where("order_id = ?", orderID).First(&t).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return nil, domain.ErrTransactionNotFound
 		}
 		return nil, err
 	}
-	return &trx, nil
+	return &t, nil
+}
+
+func (r *transactionRepository) FindAll(ctx context.Context, customerID string, limit, offset int) ([]*domain.Transaction, int64, error) {
+	var transactions []*domain.Transaction
+	var totalCount int64
+
+	query := r.db.WithContext(ctx).Model(&domain.Transaction{})
+	if customerID != "" {
+		query = query.Where("customer_id = ?", customerID)
+	}
+
+	err := query.Count(&totalCount).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	err = query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&transactions).Error
+	return transactions, totalCount, err
 }
 
 func (r *transactionRepository) Save(ctx context.Context, tx port.Tx, t *domain.Transaction) error {

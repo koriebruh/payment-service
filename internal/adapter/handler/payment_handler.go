@@ -17,6 +17,8 @@ type PaymentHandler struct {
 	chargeUsecase    port.ChargeTransactionUsecase
 	getStatusUsecase port.GetTransactionStatusUsecase
 	refundUsecase    port.RefundTransactionUsecase
+	cancelUsecase    port.CancelTransactionUsecase
+	getListUsecase   port.GetTransactionsUsecase
 	validator        *validator.Validate
 	factory          *response.ApiResponseFactory
 }
@@ -25,6 +27,8 @@ func NewPaymentHandler(
 	chargeUsecase port.ChargeTransactionUsecase,
 	getStatusUsecase port.GetTransactionStatusUsecase,
 	refundUsecase port.RefundTransactionUsecase,
+	cancelUsecase port.CancelTransactionUsecase,
+	getListUsecase port.GetTransactionsUsecase,
 	validate *validator.Validate,
 	factory *response.ApiResponseFactory,
 ) *PaymentHandler {
@@ -32,6 +36,8 @@ func NewPaymentHandler(
 		chargeUsecase:    chargeUsecase,
 		getStatusUsecase: getStatusUsecase,
 		refundUsecase:    refundUsecase,
+		cancelUsecase:    cancelUsecase,
+		getListUsecase:   getListUsecase,
 		validator:        validate,
 		factory:          factory,
 	}
@@ -169,4 +175,47 @@ func (h *PaymentHandler) Refund(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(h.factory.Success(requestID, "REFUND_INITIATED", "refund initiated successfully", result))
+}
+
+func (h *PaymentHandler) Cancel(c *fiber.Ctx) error {
+	requestID, _ := c.Locals("request_id").(string)
+	orderID := c.Params("order_id")
+
+	if orderID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(
+			h.factory.Error(requestID, domain.NewValidationError("order_id parameter is required")),
+		)
+	}
+
+	err := h.cancelUsecase.Execute(c.Context(), orderID)
+	if err != nil {
+		var appErr *domain.AppError
+		if errors.As(err, &appErr) {
+			return c.Status(appErr.HTTPStatus).JSON(h.factory.Error(requestID, appErr))
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(h.factory.Error(requestID, domain.NewInternalError(err)))
+	}
+
+	return c.Status(fiber.StatusOK).JSON(h.factory.SuccessNoData(requestID, "CANCEL_SUCCESS", "transaction cancelled successfully"))
+}
+
+func (h *PaymentHandler) GetTransactions(c *fiber.Ctx) error {
+	requestID, _ := c.Locals("request_id").(string)
+
+	limit := c.QueryInt("limit", 10)
+	offset := c.QueryInt("offset", 0)
+	customerID := c.Query("customer_id")
+
+	req := usecase_dto.ListTransactionsRequest{
+		CustomerID: customerID,
+		Limit:      limit,
+		Offset:     offset,
+	}
+
+	result, err := h.getListUsecase.Execute(c.Context(), req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(h.factory.Error(requestID, domain.NewInternalError(err)))
+	}
+
+	return c.Status(fiber.StatusOK).JSON(h.factory.Success(requestID, "FETCH_TRANSACTIONS_SUCCESS", "success fetch transactions", result))
 }

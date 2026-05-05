@@ -88,3 +88,11 @@ func (m *midtransClient) RefundTransaction(ctx context.Context, orderID string, 
 
 	return refund, nil
 }
+
+func (m *midtransClient) CancelTransaction(ctx context.Context, orderID string) error {
+	_, midtransErr := m.coreClient.CancelTransaction(orderID)
+	if midtransErr != nil {
+		return midtransErr
+	}
+	return nil
+}

@@ -27,3 +27,9 @@ type RefundRequest struct {
 	Reason         string
 	IdempotencyKey string
 }
+
+type ListTransactionsRequest struct {
+	CustomerID string
+	Limit      int
+	Offset     int
+}

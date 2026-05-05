@@ -86,6 +86,9 @@ func (u *handleMidtransWebhookUsecase) Execute(ctx context.Context, req dto.Webh
 
 		// Update state machine
 		u.updateTransactionStatus(trx, req.TransactionStatus, req.FraudStatus)
+		
+		// Capture payment details (VA, QRIS, etc.) from webhook payload
+		trx.MidtransResponse = []byte(req.RawPayload)
 
 		// Save updates
 		if err := u.transactionRepo.Update(ctx, tx, trx); err != nil {

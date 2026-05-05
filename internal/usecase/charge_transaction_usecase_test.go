@@ -48,6 +48,14 @@ func (m *MockTransactionRepository) FindByOrderID(ctx context.Context, orderID s
 	return nil, args.Error(1)
 }
 
+func (m *MockTransactionRepository) FindAll(ctx context.Context, customerID string, limit, offset int) ([]*domain.Transaction, int64, error) {
+	args := m.Called(ctx, customerID, limit, offset)
+	if args.Get(0) != nil {
+		return args.Get(0).([]*domain.Transaction), args.Get(1).(int64), args.Error(2)
+	}
+	return nil, 0, args.Error(2)
+}
+
 func (m *MockTransactionRepository) Save(ctx context.Context, tx port.Tx, t *domain.Transaction) error {
 	args := m.Called(ctx, tx, t)
 	return args.Error(0)
@@ -77,6 +85,11 @@ func (m *MockPaymentGateway) RefundTransaction(ctx context.Context, orderID stri
 		return args.Get(0).(*domain.Refund), args.Error(1)
 	}
 	return nil, args.Error(1)
+}
+
+func (m *MockPaymentGateway) CancelTransaction(ctx context.Context, orderID string) error {
+	args := m.Called(ctx, orderID)
+	return args.Error(0)
 }
 
 func TestChargeTransactionUsecase_Success(t *testing.T) {

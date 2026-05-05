@@ -104,8 +104,10 @@ func main() {
 	// 8. Init usecases
 	chargeUsecase := usecase.NewChargeTransactionUsecase(txManager, trxRepo, midtransClient, idempotencyStore)
 	webhookUsecase := usecase.NewHandleMidtransWebhookUsecase(txManager, trxRepo, webhookRepo, outboxRepo, cfg)
-	getStatusUsecase := usecase.NewGetTransactionStatusUsecase(trxRepo)
+	getStatusUsecase := usecase.NewGetTransactionStatusUsecase(trxRepo, refundRepo)
 	refundUsecase := usecase.NewRefundTransactionUsecase(txManager, trxRepo, refundRepo, midtransClient, idempotencyStore)
+	cancelUsecase := usecase.NewCancelTransactionUsecase(txManager, trxRepo, midtransClient)
+	getListUsecase := usecase.NewGetTransactionsUsecase(trxRepo)
 	getPaymentMethodsUsecase := usecase.NewGetActivePaymentMethodsUsecase(pmRepo)
 
 	// 9. Start Outbox Worker
@@ -113,7 +115,7 @@ func main() {
 	go outboxWorker.Start(ctx)
 
 	// 10. Init handlers
-	paymentHandler := handler.NewPaymentHandler(chargeUsecase, getStatusUsecase, refundUsecase, validate, respFactory)
+	paymentHandler := handler.NewPaymentHandler(chargeUsecase, getStatusUsecase, refundUsecase, cancelUsecase, getListUsecase, validate, respFactory)
 	webhookHandler := handler.NewWebhookHandler(webhookUsecase, respFactory)
 	paymentMethodHandler := handler.NewPaymentMethodHandler(getPaymentMethodsUsecase, respFactory)
 
@@ -146,9 +148,11 @@ func main() {
 	pm.Get("/", paymentMethodHandler.GetActiveMethods)
 
 	payments := api.Group("/payments")
+	payments.Get("/", paymentHandler.GetTransactions)
 	payments.Post("/charge", paymentHandler.Charge)
 	payments.Get("/:order_id", paymentHandler.GetStatus)
 	payments.Post("/:order_id/refund", paymentHandler.Refund)
+	payments.Post("/:order_id/cancel", paymentHandler.Cancel)
 	payments.Post("/webhook/midtrans", webhookHandler.MidtransCallback)
 
 	// 12. Start Server gracefully

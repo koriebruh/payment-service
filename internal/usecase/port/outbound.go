@@ -18,6 +18,7 @@ type TxManager interface {
 type TransactionRepository interface {
 	FindByID(ctx context.Context, id string) (*domain.Transaction, error)
 	FindByOrderID(ctx context.Context, orderID string) (*domain.Transaction, error)
+	FindAll(ctx context.Context, customerID string, limit, offset int) ([]*domain.Transaction, int64, error)
 	Save(ctx context.Context, tx Tx, t *domain.Transaction) error
 	Update(ctx context.Context, tx Tx, t *domain.Transaction) error
 }
@@ -30,6 +31,7 @@ type WebhookLogRepository interface {
 type PaymentGatewayPort interface {
 	CreateTransaction(ctx context.Context, t *domain.Transaction, c *domain.Customer) (*domain.Transaction, error)
 	RefundTransaction(ctx context.Context, orderID string, refund *domain.Refund) (*domain.Refund, error)
+	CancelTransaction(ctx context.Context, orderID string) error
 }
 
 type EventPublisher interface {
@@ -50,4 +52,5 @@ type PaymentMethodRepository interface {
 type RefundRepository interface {
 	Save(ctx context.Context, tx Tx, r *domain.Refund) error
 	Update(ctx context.Context, tx Tx, r *domain.Refund) error
+	FindByTransactionID(ctx context.Context, transactionID string) ([]*domain.Refund, error)
 }

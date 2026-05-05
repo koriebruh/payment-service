@@ -25,3 +25,11 @@ type RefundTransactionUsecase interface {
 type GetActivePaymentMethodsUsecase interface {
 	Execute(ctx context.Context) ([]*dto.PaymentMethodResult, error)
 }
+
+type CancelTransactionUsecase interface {
+	Execute(ctx context.Context, orderID string) error
+}
+
+type GetTransactionsUsecase interface {
+	Execute(ctx context.Context, req dto.ListTransactionsRequest) (*dto.TransactionListResult, error)
+}
