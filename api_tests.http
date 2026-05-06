@@ -1,19 +1,74 @@
-### Environment Variables
-@baseUrl = http://localhost:8080/api/v1
-@paymentMethodId = qris
-@customerId = 550e8400-e29b-41d4-a716-446655440001
-@orderId = ORDER-cust-1-168123456700-1777988359
+### ============================================================
+### Payment Service — API Test Suite
+### ============================================================
+### Base URL & shared variables
+@baseUrl      = http://localhost:8080/api/v1
+@customerId   = 550e8400-e29b-41d4-a716-446655440001
 
-### 1. Healthcheck (Database & Redis Status)
+### Payment method IDs (string-based, from payment_methods table)
+### Available: qris | gopay | shopeepay | bca_va | bni_va | echannel
+###            bri_va | permata_va | credit_card | alfamart | indomaret | akulaku
+@paymentMethodId = qris
+
+### After calling POST /payments/charge, paste the returned order_id here
+### Pattern: ORDER-{payment_method_id}-{nanoseconds}
+### Example: ORDER-qris-1777991352878176829
+@orderId = ORDER-qris-1777991352878176829
+
+### After calling POST /payments/charge, paste the returned transaction_id here
+### Pattern: INV/YYYYMMDD/TRX-XXXXXX
+### Example: INV/20260506/TRX-004821
+@transactionId = INV/20260506/TRX-004821
+
+### Midtrans sandbox server key (for generating valid signature in webhook tests)
+### Formula: SHA512(order_id + status_code + gross_amount + server_key)
+@serverKey = SB-Mid-server-HNHa_ZeECYP97j2YGq5uJyBG
+
+### ─────────────────────────────────────────────────────────────
+### 1. Liveness Check
+### ─────────────────────────────────────────────────────────────
+### Expected: { "status": "UP", "components": { "database": "UP", "redis": "UP" } }
+
+# @name healthcheck
 GET http://localhost:8080/health
 
-### 2. Metrics (Prometheus)
+###
+
+### ─────────────────────────────────────────────────────────────
+### 2. Readiness / Prometheus Metrics
+### ─────────────────────────────────────────────────────────────
+
+# @name metrics
 GET http://localhost:8080/metrics
 
-### 2. Create Payment (Charge)
+###
+
+### ─────────────────────────────────────────────────────────────
+### 3. Get Active Payment Methods
+### ─────────────────────────────────────────────────────────────
+### Expected: list of 12 methods (QRIS, GoPay, ShopeePay, BCA VA, etc.)
+
+# @name getPaymentMethods
+GET {{baseUrl}}/payment-methods
+
+###
+
+### ─────────────────────────────────────────────────────────────
+### 4. Create Payment / Charge (QRIS)
+### ─────────────────────────────────────────────────────────────
+### Expected:
+###   transaction_id → INV/YYYYMMDD/TRX-XXXXXX
+###   order_id       → ORDER-qris-{nanoseconds}
+###   status         → pending
+###   snap_token     → (Midtrans snap token)
+###   payment_url    → https://app.sandbox.midtrans.com/snap/...
+###
+### After success: copy order_id → @orderId, transaction_id → @transactionId above
+
+# @name chargeQris
 POST {{baseUrl}}/payments/charge
 Content-Type: application/json
-X-Idempotency-Key: idem-charge-test-001
+X-Idempotency-Key: idem-charge-qris-001
 
 {
     "customer_id": "{{customerId}}",
@@ -22,29 +77,106 @@ X-Idempotency-Key: idem-charge-test-001
     "currency": "IDR"
 }
 
-### 3. Midtrans Webhook Callback (Simulate Settlement)
-# Note: You need to generate a valid signature_key matching your MIDTRANS_SERVER_KEY 
-# for this to return a 200 OK. If the signature is invalid, the service will reject it.
-# Formula: SHA512(order_id + status_code + gross_amount + server_key)
+###
+
+### ─────────────────────────────────────────────────────────────
+### 5. Create Payment / Charge (BCA Virtual Account)
+### ─────────────────────────────────────────────────────────────
+
+# @name chargeBcaVa
+POST {{baseUrl}}/payments/charge
+Content-Type: application/json
+X-Idempotency-Key: idem-charge-bca-001
+
+{
+    "customer_id": "{{customerId}}",
+    "payment_method_id": "bca_va",
+    "amount": 250000,
+    "currency": "IDR"
+}
+
+###
+
+### ─────────────────────────────────────────────────────────────
+### 6. Idempotency Test — Duplicate Charge (same key)
+### ─────────────────────────────────────────────────────────────
+### Expected: same response as #4 (no new transaction created)
+
+# @name chargeQrisDuplicate
+POST {{baseUrl}}/payments/charge
+Content-Type: application/json
+X-Idempotency-Key: idem-charge-qris-001
+
+{
+    "customer_id": "{{customerId}}",
+    "payment_method_id": "{{paymentMethodId}}",
+    "amount": 100000,
+    "currency": "IDR"
+}
+
+###
+
+### ─────────────────────────────────────────────────────────────
+### 7. Get Transaction Status
+### ─────────────────────────────────────────────────────────────
+### Use order_id returned from charge (not transaction_id)
+### Expected: transaction details + refunds array
+
+# @name getTransactionStatus
+GET {{baseUrl}}/payments/{{orderId}}
+
+###
+
+### ─────────────────────────────────────────────────────────────
+### 8. List Transactions (paginated)
+### ─────────────────────────────────────────────────────────────
+### Query params: limit, offset, customer_id (optional)
+
+# @name listTransactions
+GET {{baseUrl}}/payments?limit=10&offset=0
+
+###
+
+### ─────────────────────────────────────────────────────────────
+### 9. Midtrans Webhook — Simulate Settlement (status 200)
+### ─────────────────────────────────────────────────────────────
+### IMPORTANT: signature_key must be valid or the webhook will be rejected.
+### Generate with: SHA512(order_id + "200" + "100000.00" + serverKey)
+###
+### PowerShell helper:
+###   $str = "ORDER-qris-1777991352878176829200100000.00SB-Mid-server-HNHa_ZeECYP97j2YGq5uJyBG"
+###   $bytes = [System.Text.Encoding]::UTF8.GetBytes($str)
+###   $sha = [System.Security.Cryptography.SHA512]::Create()
+###   [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace("-","").ToLower()
+
+# @name webhookSettlement
 POST {{baseUrl}}/payments/webhook/midtrans
 Content-Type: application/json
 
 {
-    "transaction_id": "midtrans-txn-12345",
+    "transaction_id": "midtrans-txn-settlement-001",
     "order_id": "{{orderId}}",
     "gross_amount": "100000.00",
     "status_code": "200",
     "fraud_status": "accept",
     "transaction_status": "settlement",
-    "signature_key": "simulate-invalid-signature-here-for-test"
+    "payment_type": "qris",
+    "signature_key": "REPLACE_WITH_VALID_SHA512_SIGNATURE"
 }
 
-### 4. Midtrans Webhook Callback (Simulate QRIS Pending/Created)
+###
+
+### ─────────────────────────────────────────────────────────────
+### 10. Midtrans Webhook — Simulate QRIS Pending/Waiting
+### ─────────────────────────────────────────────────────────────
+### status_code 201 = pending (awaiting payment)
+
+# @name webhookQrisPending
 POST {{baseUrl}}/payments/webhook/midtrans
 Content-Type: application/json
 
 {
-    "transaction_id": "midtrans-txn-qris-123",
+    "transaction_id": "midtrans-txn-qris-pending-001",
     "order_id": "{{orderId}}",
     "gross_amount": "100000.00",
     "status_code": "201",
@@ -53,29 +185,73 @@ Content-Type: application/json
     "payment_type": "qris",
     "acquirer": "gopay",
     "qr_string": "00020101021126650016ID.CO.GOJEK.WWW01189360091421330349890214081048698188150303UMO51430014ID.CO.QRIS.WWW0215ID10190000000000303UMO520454995303IDR54061000005802ID5919Toko Maju Terus6007Jakarta6105123456254011832049103984920485903140510123456789063046C49",
-    "signature_key": "simulate-invalid-signature-here-for-test"
+    "signature_key": "REPLACE_WITH_VALID_SHA512_SIGNATURE"
 }
 
-### 5. Check Transaction Status (To see QRIS / VA Payment Details)
-GET {{baseUrl}}/payments/{{orderId}}
+###
 
-### 6. Refund Transaction
+### ─────────────────────────────────────────────────────────────
+### 11. Midtrans Webhook — Simulate Expire
+### ─────────────────────────────────────────────────────────────
+
+# @name webhookExpire
+POST {{baseUrl}}/payments/webhook/midtrans
+Content-Type: application/json
+
+{
+    "transaction_id": "midtrans-txn-expire-001",
+    "order_id": "{{orderId}}",
+    "gross_amount": "100000.00",
+    "status_code": "407",
+    "fraud_status": "accept",
+    "transaction_status": "expire",
+    "signature_key": "REPLACE_WITH_VALID_SHA512_SIGNATURE"
+}
+
+###
+
+### ─────────────────────────────────────────────────────────────
+### 12. Refund Transaction (partial)
+### ─────────────────────────────────────────────────────────────
+### Requires transaction to be in "settlement" status first.
+### Expected:
+###   refund_id → REF/YYYYMMDD/XXXX
+###   status    → pending → success (after Midtrans confirms)
+
+# @name refundPartial
 POST {{baseUrl}}/payments/{{orderId}}/refund
 Content-Type: application/json
-X-Idempotency-Key: idem-refund-test-001
+X-Idempotency-Key: idem-refund-qris-001
 
 {
     "amount": 50000,
-    "reason": "Customer requested refund"
+    "reason": "Customer requested partial refund"
 }
 
-### 7. Get Active Payment Methods
-GET {{baseUrl}}/payment-methods
+###
 
-### 8. List Transactions
-GET {{baseUrl}}/payments?limit=10&offset=0
+### ─────────────────────────────────────────────────────────────
+### 13. Refund Transaction (full)
+### ─────────────────────────────────────────────────────────────
 
-### 9. Cancel Transaction
+# @name refundFull
+POST {{baseUrl}}/payments/{{orderId}}/refund
+Content-Type: application/json
+X-Idempotency-Key: idem-refund-full-qris-001
+
+{
+    "amount": 100000,
+    "reason": "Full refund — item out of stock"
+}
+
+###
+
+### ─────────────────────────────────────────────────────────────
+### 14. Cancel Transaction
+### ─────────────────────────────────────────────────────────────
+### Only works when transaction is still in "pending" status.
+
+# @name cancelTransaction
 POST {{baseUrl}}/payments/{{orderId}}/cancel
 
-
+###
