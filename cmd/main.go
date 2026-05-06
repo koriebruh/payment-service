@@ -102,7 +102,7 @@ func main() {
 	kafkaPublisher := publisher.NewKafkaPublisher(cfg)
 
 	// 8. Init usecases
-	chargeUsecase := usecase.NewChargeTransactionUsecase(txManager, trxRepo, pmRepo, midtransClient, idempotencyStore)
+	chargeUsecase := usecase.NewChargeTransactionUsecase(txManager, trxRepo, midtransClient, idempotencyStore)
 	webhookUsecase := usecase.NewHandleMidtransWebhookUsecase(txManager, trxRepo, webhookRepo, outboxRepo, cfg)
 	getStatusUsecase := usecase.NewGetTransactionStatusUsecase(trxRepo, refundRepo)
 	refundUsecase := usecase.NewRefundTransactionUsecase(txManager, trxRepo, refundRepo, midtransClient, idempotencyStore)

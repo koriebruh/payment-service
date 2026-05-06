@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/koriebruh/payment-service/internal/domain"
 	"github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
@@ -68,7 +66,7 @@ func (u *refundTransactionUsecase) Execute(ctx context.Context, req dto.RefundRe
 	}
 
 	refund := &domain.Refund{
-		ID:            uuid.NewString(),
+		ID:            domain.GenerateRefundID(time.Now()),
 		TransactionID: trx.ID,
 		Amount:        req.Amount,
 		Reason:        reason,

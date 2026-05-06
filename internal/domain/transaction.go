@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"fmt"
+	"math/rand/v2"
 	"time"
 )
 
@@ -33,6 +35,14 @@ type Transaction struct {
 	CorrelationID         *string
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
+}
+
+// GenerateTransactionID produces a human-readable transaction ID.
+// Pattern: INV/{YYYYMMDD}/TRX-{6-digit-random}
+// Example: INV/20260506/TRX-004821
+func GenerateTransactionID(t time.Time) string {
+	seq := rand.IntN(900000) + 100000 // always 6 digits: 100000–999999
+	return fmt.Sprintf("INV/%s/TRX-%06d", t.Format("20060102"), seq)
 }
 
 func (t *Transaction) CanProcess() error {
