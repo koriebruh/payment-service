@@ -15,7 +15,7 @@ processors:
 
 exporters:
   otlp: # Export traces to Jaeger
-    endpoint: "jaeger:4317"
+    endpoint: "payment-service-jaeger:4317"
     tls:
       insecure: true
   prometheus: # Export metrics to Prometheus

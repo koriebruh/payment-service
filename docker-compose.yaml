@@ -1,5 +1,6 @@
 services:
   payment-service:
+    container_name: payment-service-app
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,10 +10,10 @@ services:
       - .env
     environment:
       # Override host variables for Docker networking
-      - DB_HOST=postgres
-      - KAFKA_BROKERS=kafka:9092
-      - REDIS_HOST=redis
-      - OTEL_ENDPOINT=otel-collector:4317
+      - DB_HOST=payment-service-postgres
+      - KAFKA_BROKERS=payment-service-kafka:9092
+      - REDIS_HOST=payment-service-redis
+      - OTEL_ENDPOINT=payment-service-otel-collector:4317
       - LOG_FILE_PATH=/app/logs/payment-service.log
     volumes:
       - ./logs:/app/logs
@@ -27,6 +28,7 @@ services:
       - payment-network
 
   postgres:
+    container_name: payment-service-postgres
     image: postgres:15-alpine
     environment:
       - POSTGRES_DB=${DB_NAME}
@@ -45,6 +47,7 @@ services:
       - payment-network
 
   redis:
+    container_name: payment-service-redis
     image: redis:7-alpine
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -54,6 +57,7 @@ services:
       - payment-network
 
   zookeeper:
+    container_name: payment-service-zookeeper
     image: confluentinc/cp-zookeeper:7.4.0
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -65,6 +69,7 @@ services:
       - payment-network
 
   kafka:
+    container_name: payment-service-kafka
     image: confluentinc/cp-kafka:7.4.0
     depends_on:
       - zookeeper
@@ -72,8 +77,8 @@ services:
       - "9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ZOOKEEPER_CONNECT: payment-service-zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://payment-service-kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     volumes:
       - kafkadata:/var/lib/kafka/data
@@ -81,6 +86,7 @@ services:
       - payment-network
 
   jaeger:
+    container_name: payment-service-jaeger
     image: jaegertracing/all-in-one:1.55.0
     environment:
       - COLLECTOR_OTLP_ENABLED=true
@@ -92,6 +98,7 @@ services:
       - payment-network
 
   otel-collector:
+    container_name: payment-service-otel-collector
     image: otel/opentelemetry-collector-contrib:0.95.0
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
@@ -106,6 +113,7 @@ services:
       - jaeger
 
   prometheus:
+    container_name: payment-service-prometheus
     image: prom/prometheus:v2.51.0
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -118,22 +126,25 @@ services:
       - payment-service
 
   grafana:
+    container_name: payment-service-grafana
     image: grafana/grafana:10.4.0
     ports:
       - "3000:3000"
     volumes:
       - grafanadata:/var/lib/grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
     networks:
       - payment-network
     depends_on:
       - prometheus
 
   postgres-exporter:
+    container_name: payment-service-postgres-exporter
     image: prometheuscommunity/postgres-exporter:v0.15.0
     environment:
-      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@payment-service-postgres:5432/${DB_NAME}?sslmode=disable"
     ports:
       - "9187:9187"
     networks:

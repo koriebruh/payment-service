@@ -49,6 +49,10 @@ func (f *ApiResponseFactory) Error(
 	requestID string,
 	appErr *domain.AppError,
 ) ApiResponse[any] {
+	if appErr == nil {
+		appErr = domain.NewInternalError(nil)
+	}
+
 	return ApiResponse[any]{
 		Success: false,
 		Code:    appErr.Code,
