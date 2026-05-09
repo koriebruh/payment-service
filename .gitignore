@@ -1,5 +1,8 @@
 .idea
 .vscode
 .env
+logs/
+tmp_build/
+tmp_build
 *.exe
 payment-service
