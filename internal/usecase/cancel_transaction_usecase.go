@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/koriebruh/payment-service/internal/domain"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
 )
@@ -28,6 +30,9 @@ func NewCancelTransactionUsecase(
 }
 
 func (u *cancelTransactionUsecase) Execute(ctx context.Context, orderID string) error {
+	ctx, span := otel.Tracer("payment-service/usecase").Start(ctx, "cancelTransactionUsecase.Execute")
+	defer span.End()
+
 	trx, err := u.transactionRepo.FindByOrderID(ctx, orderID)
 	if err != nil {
 		return err

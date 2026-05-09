@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/koriebruh/payment-service/internal/domain"
 	"github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
@@ -40,6 +42,9 @@ func NewChargeTransactionUsecase(
 }
 
 func (u *chargeTransactionUsecase) Execute(ctx context.Context, req dto.ChargeRequest) (*dto.ChargeResult, error) {
+	ctx, span := otel.Tracer("payment-service/usecase").Start(ctx, "chargeTransactionUsecase.Execute")
+	defer span.End()
+
 	// 1. Idempotency check — mandatory for all financial write operations (GEMINI.md rule 11)
 	if u.idempotencyStore != nil && req.IdempotencyKey != "" {
 		cached, err := u.idempotencyStore.Get(ctx, req.IdempotencyKey)

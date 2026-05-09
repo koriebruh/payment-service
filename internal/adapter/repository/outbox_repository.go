@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 
 	"github.com/koriebruh/payment-service/internal/domain"
@@ -18,11 +19,17 @@ func NewOutboxRepository(db *gorm.DB) port.OutboxRepository {
 }
 
 func (r *outboxRepository) Save(ctx context.Context, tx port.Tx, event *domain.OutboxEvent) error {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "outboxRepository.Save")
+	defer span.End()
+
 	db := GetGormDB(r.db, tx)
 	return db.WithContext(ctx).Create(event).Error
 }
 
 func (r *outboxRepository) FindPendingEvents(ctx context.Context, tx port.Tx, limit int) ([]*domain.OutboxEvent, error) {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "outboxRepository.FindPendingEvents")
+	defer span.End()
+
 	db := GetGormDB(r.db, tx)
 	var events []*domain.OutboxEvent
 	// Order by created_at to process oldest first
@@ -37,6 +44,9 @@ func (r *outboxRepository) FindPendingEvents(ctx context.Context, tx port.Tx, li
 }
 
 func (r *outboxRepository) MarkAsPublished(ctx context.Context, tx port.Tx, ids []string) error {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "outboxRepository.MarkAsPublished")
+	defer span.End()
+
 	if len(ids) == 0 {
 		return nil
 	}
@@ -51,6 +61,9 @@ func (r *outboxRepository) MarkAsPublished(ctx context.Context, tx port.Tx, ids 
 }
 
 func (r *outboxRepository) MarkAsFailed(ctx context.Context, tx port.Tx, id string) error {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "outboxRepository.MarkAsFailed")
+	defer span.End()
+
 	db := GetGormDB(r.db, tx)
 	return db.WithContext(ctx).
 		Model(&domain.OutboxEvent{}).

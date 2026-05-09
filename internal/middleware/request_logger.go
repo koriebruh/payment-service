@@ -15,6 +15,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/koriebruh/payment-service/pkg/logger"
 )
@@ -31,11 +32,16 @@ func RequestLogger(log *slog.Logger) fiber.Handler {
 			requestID = uuid.NewString()
 		}
 
+		// Extract trace_id from OTEL context if available
+		span := trace.SpanFromContext(c.UserContext())
+		traceID := span.SpanContext().TraceID().String()
+
 		// Store in locals so handlers can access it
 		c.Locals("request_id", requestID)
+		c.Locals("trace_id", traceID)
 
 		// Create request-scoped logger and store in context
-		reqLogger := log.With("request_id", requestID)
+		reqLogger := log.With("request_id", requestID, "trace_id", traceID)
 		ctx := logger.WithContext(c.Context(), reqLogger)
 		c.SetUserContext(ctx)
 

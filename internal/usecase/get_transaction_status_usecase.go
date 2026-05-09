@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
 )
@@ -21,6 +23,9 @@ func NewGetTransactionStatusUsecase(transactionRepo port.TransactionRepository, 
 }
 
 func (u *getTransactionStatusUsecase) Execute(ctx context.Context, orderID string) (*dto.TransactionStatusResult, error) {
+	ctx, span := otel.Tracer("payment-service/usecase").Start(ctx, "getTransactionStatusUsecase.Execute")
+	defer span.End()
+
 	trx, err := u.transactionRepo.FindByOrderID(ctx, orderID)
 	if err != nil {
 		return nil, err

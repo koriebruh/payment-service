@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 
 	"github.com/koriebruh/payment-service/internal/usecase/port"
@@ -29,6 +30,9 @@ func (t *gormTx) Rollback() error {
 }
 
 func (m *gormTxManager) WithTx(ctx context.Context, fn func(tx port.Tx) error) error {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "gormTxManager.WithTx")
+	defer span.End()
+
 	txDB := m.db.WithContext(ctx).Begin()
 	if txDB.Error != nil {
 		return txDB.Error

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 
 	"github.com/koriebruh/payment-service/internal/domain"
@@ -19,6 +20,9 @@ func NewTransactionRepository(db *gorm.DB) port.TransactionRepository {
 }
 
 func (r *transactionRepository) FindByID(ctx context.Context, id string) (*domain.Transaction, error) {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "transactionRepository.FindByID")
+	defer span.End()
+
 	var trx domain.Transaction
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&trx).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -30,6 +34,9 @@ func (r *transactionRepository) FindByID(ctx context.Context, id string) (*domai
 }
 
 func (r *transactionRepository) FindByOrderID(ctx context.Context, orderID string) (*domain.Transaction, error) {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "transactionRepository.FindByOrderID")
+	defer span.End()
+
 	var t domain.Transaction
 	err := r.db.WithContext(ctx).Where("order_id = ?", orderID).First(&t).Error
 	if err != nil {
@@ -42,6 +49,9 @@ func (r *transactionRepository) FindByOrderID(ctx context.Context, orderID strin
 }
 
 func (r *transactionRepository) FindByOrderIDForUpdate(ctx context.Context, tx port.Tx, orderID string) (*domain.Transaction, error) {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "transactionRepository.FindByOrderIDForUpdate")
+	defer span.End()
+
 	db := GetGormDB(r.db, tx)
 	var t domain.Transaction
 	// SELECT ... FOR UPDATE — pessimistic lock to prevent concurrent webhook processing
@@ -59,6 +69,9 @@ func (r *transactionRepository) FindByOrderIDForUpdate(ctx context.Context, tx p
 }
 
 func (r *transactionRepository) FindAll(ctx context.Context, customerID string, limit, offset int) ([]*domain.Transaction, int64, error) {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "transactionRepository.FindAll")
+	defer span.End()
+
 	var transactions []*domain.Transaction
 	var totalCount int64
 
@@ -77,11 +90,17 @@ func (r *transactionRepository) FindAll(ctx context.Context, customerID string, 
 }
 
 func (r *transactionRepository) Save(ctx context.Context, tx port.Tx, t *domain.Transaction) error {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "transactionRepository.Save")
+	defer span.End()
+
 	db := GetGormDB(r.db, tx)
 	return db.WithContext(ctx).Create(t).Error
 }
 
 func (r *transactionRepository) Update(ctx context.Context, tx port.Tx, t *domain.Transaction) error {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "transactionRepository.Update")
+	defer span.End()
+
 	db := GetGormDB(r.db, tx)
 	return db.WithContext(ctx).Save(t).Error
 }

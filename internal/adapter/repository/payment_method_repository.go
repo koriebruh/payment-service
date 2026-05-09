@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 
 	"github.com/koriebruh/payment-service/internal/domain"
@@ -18,6 +19,9 @@ func NewPaymentMethodRepository(db *gorm.DB) port.PaymentMethodRepository {
 }
 
 func (r *paymentMethodRepository) FindByID(ctx context.Context, id string) (*domain.PaymentMethod, error) {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "paymentMethodRepository.FindByID")
+	defer span.End()
+
 	var method domain.PaymentMethod
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&method).Error
 	if err != nil {
@@ -27,6 +31,9 @@ func (r *paymentMethodRepository) FindByID(ctx context.Context, id string) (*dom
 }
 
 func (r *paymentMethodRepository) FindAllActive(ctx context.Context) ([]*domain.PaymentMethod, error) {
+	ctx, span := otel.Tracer("payment-service/repository").Start(ctx, "paymentMethodRepository.FindAllActive")
+	defer span.End()
+
 	var methods []*domain.PaymentMethod
 	err := r.db.WithContext(ctx).Where("is_active = ?", true).Find(&methods).Error
 	return methods, err

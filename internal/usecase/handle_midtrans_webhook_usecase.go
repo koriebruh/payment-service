@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
 
 	"github.com/koriebruh/payment-service/config"
 	"github.com/koriebruh/payment-service/internal/domain"
@@ -42,6 +43,9 @@ func NewHandleMidtransWebhookUsecase(
 }
 
 func (u *handleMidtransWebhookUsecase) Execute(ctx context.Context, req dto.WebhookPayload) error {
+	ctx, span := otel.Tracer("payment-service/usecase").Start(ctx, "handleMidtransWebhookUsecase.Execute")
+	defer span.End()
+
 	// 1. Signature validation
 	isValid := u.validateSignature(req.OrderID, req.StatusCode, req.GrossAmount, req.SignatureKey)
 	signatureValidStr := "invalid"

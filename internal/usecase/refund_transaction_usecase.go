@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/koriebruh/payment-service/internal/domain"
 	"github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
@@ -37,6 +39,9 @@ func NewRefundTransactionUsecase(
 }
 
 func (u *refundTransactionUsecase) Execute(ctx context.Context, req dto.RefundRequest) (*dto.RefundResult, error) {
+	ctx, span := otel.Tracer("payment-service/usecase").Start(ctx, "refundTransactionUsecase.Execute")
+	defer span.End()
+
 	// Simple Idempotency logic
 	if req.IdempotencyKey != "" && u.idempotencyStore != nil {
 		if record, err := u.idempotencyStore.Get(ctx, req.IdempotencyKey); err == nil && record != nil {
