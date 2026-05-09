@@ -2,21 +2,27 @@ package gateway
 
 import (
 	"context"
-
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/midtrans/midtrans-go"
 	"github.com/midtrans/midtrans-go/coreapi"
 	"github.com/midtrans/midtrans-go/snap"
+	"github.com/sony/gobreaker"
 
 	"github.com/koriebruh/payment-service/config"
 	"github.com/koriebruh/payment-service/internal/domain"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
+	"github.com/koriebruh/payment-service/pkg/circuitbreaker"
 )
 
 type midtransClient struct {
 	snapClient snap.Client
 	coreClient coreapi.Client
+	breaker    *gobreaker.CircuitBreaker
+	timeout    time.Duration
 }
 
 func NewMidtransClient(cfg *config.Config) port.PaymentGatewayPort {
@@ -27,15 +33,38 @@ func NewMidtransClient(cfg *config.Config) port.PaymentGatewayPort {
 		envType = midtrans.Sandbox
 	}
 
+	// 1. Setup HTTP Client with Timeout
+	httpClient := &midtrans.HttpClientImplementation{
+		HttpClient: &http.Client{
+			Timeout: cfg.Midtrans.Timeout,
+		},
+		Logger: midtrans.GetDefaultLogger(envType),
+	}
+
+	// 2. Setup Snap Client
 	var snapClient snap.Client
 	snapClient.New(cfg.Midtrans.ServerKey, envType)
+	snapClient.HttpClient = httpClient
 
+	// 3. Setup CoreAPI Client
 	var coreClient coreapi.Client
 	coreClient.New(cfg.Midtrans.ServerKey, envType)
+	coreClient.HttpClient = httpClient
+
+	// 4. Setup Circuit Breaker
+	cbCfg := circuitbreaker.CircuitBreakerConfig{
+		Name:        "midtrans-gateway",
+		MaxRequests: cfg.Midtrans.CBMaxRequests,
+		Interval:    cfg.Midtrans.CBInterval,
+		Timeout:     cfg.Midtrans.CBTimeout,
+	}
+	breaker := circuitbreaker.NewCircuitBreaker(cbCfg)
 
 	return &midtransClient{
 		snapClient: snapClient,
 		coreClient: coreClient,
+		breaker:    breaker,
+		timeout:    cfg.Midtrans.Timeout,
 	}
 }
 
@@ -52,11 +81,17 @@ func (m *midtransClient) CreateTransaction(ctx context.Context, t *domain.Transa
 		},
 	}
 
-	snapResp, err := m.snapClient.CreateTransaction(req)
+	// Execute via Circuit Breaker
+	res, err := m.breaker.Execute(func() (interface{}, error) {
+		// Snap API doesn't accept context directly, but we use the global configured httpClient timeout
+		return m.snapClient.CreateTransaction(req)
+	})
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gateway CreateTransaction failed: %w", err)
 	}
 
+	snapResp := res.(*snap.Response)
 	t.SnapToken = &snapResp.Token
 	t.PaymentURL = &snapResp.RedirectURL
 
@@ -75,11 +110,16 @@ func (m *midtransClient) RefundTransaction(ctx context.Context, orderID string, 
 		Reason:    reason,
 	}
 
-	resp, midtransErr := m.coreClient.RefundTransaction(orderID, req)
-	if midtransErr != nil {
-		return nil, midtransErr
+	// Execute via Circuit Breaker
+	res, err := m.breaker.Execute(func() (interface{}, error) {
+		return m.coreClient.RefundTransaction(orderID, req)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("gateway RefundTransaction failed: %w", err)
 	}
 
+	resp := res.(*coreapi.RefundResponse)
 	refund.Status = domain.RefundStatusSuccess
 	refund.MidtransRefundKey = &req.RefundKey
 
@@ -90,9 +130,14 @@ func (m *midtransClient) RefundTransaction(ctx context.Context, orderID string, 
 }
 
 func (m *midtransClient) CancelTransaction(ctx context.Context, orderID string) error {
-	_, midtransErr := m.coreClient.CancelTransaction(orderID)
-	if midtransErr != nil {
-		return midtransErr
+	// Execute via Circuit Breaker
+	_, err := m.breaker.Execute(func() (interface{}, error) {
+		return m.coreClient.CancelTransaction(orderID)
+	})
+
+	if err != nil {
+		return fmt.Errorf("gateway CancelTransaction failed: %w", err)
 	}
+
 	return nil
 }

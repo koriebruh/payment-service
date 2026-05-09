@@ -38,9 +38,13 @@ type KafkaConfig struct {
 }
 
 type MidtransConfig struct {
-	ServerKey string `env:"MIDTRANS_SERVER_KEY,required"`
-	ClientKey string `env:"MIDTRANS_CLIENT_KEY"`
-	IsProd    bool   `env:"MIDTRANS_IS_PROD" envDefault:"false"`
+	ServerKey     string        `env:"MIDTRANS_SERVER_KEY,required"`
+	ClientKey     string        `env:"MIDTRANS_CLIENT_KEY"`
+	IsProd        bool          `env:"MIDTRANS_IS_PROD" envDefault:"false"`
+	Timeout       time.Duration `env:"MIDTRANS_TIMEOUT" envDefault:"10s"`
+	CBMaxRequests uint32        `env:"MIDTRANS_CB_MAX_REQUESTS" envDefault:"3"`
+	CBInterval    time.Duration `env:"MIDTRANS_CB_INTERVAL" envDefault:"1m"`
+	CBTimeout     time.Duration `env:"MIDTRANS_CB_TIMEOUT" envDefault:"30s"`
 }
 
 type RedisConfig struct {
