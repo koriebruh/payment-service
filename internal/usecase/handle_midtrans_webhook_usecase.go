@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,47 +61,58 @@ func (u *handleMidtransWebhookUsecase) Execute(ctx context.Context, req dto.Webh
 	}
 
 	if !isValid {
-		// Log the invalid attempt and return error so we don't process further
+		slog.Warn("webhook signature invalid",
+			"order_id", req.OrderID,
+			"midtrans_txn_id", req.TransactionID,
+		)
 		_ = u.txManager.WithTx(ctx, func(tx port.Tx) error {
 			return u.webhookLogRepo.Save(ctx, tx, webhookLog)
 		})
 		return domain.ErrInvalidSignature
 	}
 
-	// 2. Process logic inside Tx
+	// 2. Process logic inside Tx — pessimistic lock on transaction row to prevent race condition
 	err := u.txManager.WithTx(ctx, func(tx port.Tx) error {
-		// Idempotency check: Have we processed this midtrans_transaction_id with this status before?
+		// Idempotency check
 		existingLog, err := u.webhookLogRepo.FindByMidtransTransactionIDAndStatus(ctx, req.TransactionID, req.TransactionStatus)
 		if err == nil && existingLog != nil {
-			// Already processed, return nil to act as idempotent success
+			slog.Info("webhook already processed (idempotent skip)",
+				"order_id", req.OrderID,
+				"midtrans_status", req.TransactionStatus,
+			)
 			return nil
 		}
 
-		// Find transaction
-		trx, err := u.transactionRepo.FindByOrderID(ctx, req.OrderID)
+		// Pessimistic lock — SELECT ... FOR UPDATE
+		trx, err := u.transactionRepo.FindByOrderIDForUpdate(ctx, tx, req.OrderID)
 		if err != nil {
-			return err
+			return fmt.Errorf("find transaction for update: %w", err)
 		}
 
 		webhookLog.TransactionID = &trx.ID
 
-		// Update state machine
+		prevStatus := trx.Status
 		u.updateTransactionStatus(trx, req.TransactionStatus, req.FraudStatus)
-		
-		// Capture payment details (VA, QRIS, etc.) from webhook payload
+
+		slog.Info("webhook status transition",
+			"order_id", req.OrderID,
+			"prev_status", string(prevStatus),
+			"new_status", string(trx.Status),
+			"midtrans_status", req.TransactionStatus,
+		)
+
+		// Capture payment details from webhook payload
 		trx.MidtransResponse = []byte(req.RawPayload)
 
-		// Save updates
 		if err := u.transactionRepo.Update(ctx, tx, trx); err != nil {
-			return err
+			return fmt.Errorf("update transaction: %w", err)
 		}
 
-		// Save webhook log
 		if err := u.webhookLogRepo.Save(ctx, tx, webhookLog); err != nil {
-			return err
+			return fmt.Errorf("save webhook log: %w", err)
 		}
 
-		// If settled, save outbox event
+		// If settled, save outbox event (atomic with the update — GEMINI.md rule 8)
 		if trx.Status == domain.StatusSettlement {
 			eventEnvelope := u.buildPaymentSettledEvent(trx)
 			outboxEvent := &domain.OutboxEvent{
@@ -117,6 +129,10 @@ func (u *handleMidtransWebhookUsecase) Execute(ctx context.Context, req dto.Webh
 			if err := u.outboxRepo.Save(ctx, tx, outboxEvent); err != nil {
 				return fmt.Errorf("save outbox event: %w", err)
 			}
+			slog.Info("outbox event queued",
+				"order_id", req.OrderID,
+				"event_type", eventEnvelope.EventType,
+			)
 		}
 
 		return nil

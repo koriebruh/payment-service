@@ -50,6 +50,14 @@ func (m *MockTransactionRepository) FindByOrderID(ctx context.Context, orderID s
 	return nil, args.Error(1)
 }
 
+func (m *MockTransactionRepository) FindByOrderIDForUpdate(ctx context.Context, tx port.Tx, orderID string) (*domain.Transaction, error) {
+	args := m.Called(ctx, tx, orderID)
+	if args.Get(0) != nil {
+		return args.Get(0).(*domain.Transaction), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *MockTransactionRepository) FindAll(ctx context.Context, customerID string, limit, offset int) ([]*domain.Transaction, int64, error) {
 	args := m.Called(ctx, customerID, limit, offset)
 	if args.Get(0) != nil {

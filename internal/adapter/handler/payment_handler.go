@@ -10,6 +10,7 @@ import (
 	"github.com/koriebruh/payment-service/internal/domain"
 	usecase_dto "github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
+	"github.com/koriebruh/payment-service/pkg/logger"
 	"github.com/koriebruh/payment-service/pkg/response"
 )
 
@@ -45,7 +46,7 @@ func NewPaymentHandler(
 
 func (h *PaymentHandler) Charge(c *fiber.Ctx) error {
 	requestID, _ := c.Locals("request_id").(string)
-	traceID, _ := c.Locals("trace_id").(string)
+	log := logger.FromContext(c.UserContext())
 
 	var reqDTO dto.ChargeRequestDTO
 	if err := c.BodyParser(&reqDTO); err != nil {
@@ -78,17 +79,29 @@ func (h *PaymentHandler) Charge(c *fiber.Ctx) error {
 		Currency:        reqDTO.Currency,
 		IdempotencyKey:  reqDTO.IdempotencyKey,
 		RequestID:       requestID,
-		TraceID:         traceID,
+		TraceID:         requestID,
 	}
 
 	result, err := h.chargeUsecase.Execute(c.Context(), req)
 	if err != nil {
+		log.Error("charge failed",
+			"customer_id", reqDTO.CustomerID,
+			"payment_method", reqDTO.PaymentMethodID,
+			"amount", reqDTO.Amount,
+			"error", err.Error(),
+		)
 		var appErr *domain.AppError
 		if errors.As(err, &appErr) {
 			return c.Status(appErr.HTTPStatus).JSON(h.factory.Error(requestID, appErr))
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(h.factory.Error(requestID, domain.NewInternalError(err)))
 	}
+
+	log.Info("charge success",
+		"transaction_id", result.TransactionID,
+		"order_id", result.OrderID,
+		"amount", reqDTO.Amount,
+	)
 
 	respDTO := dto.ChargeResponseDTO{
 		TransactionID: result.TransactionID,
@@ -131,6 +144,7 @@ type RefundRequestPayload struct {
 
 func (h *PaymentHandler) Refund(c *fiber.Ctx) error {
 	requestID, _ := c.Locals("request_id").(string)
+	log := logger.FromContext(c.UserContext())
 	orderID := c.Params("order_id")
 
 	if orderID == "" {
@@ -167,6 +181,7 @@ func (h *PaymentHandler) Refund(c *fiber.Ctx) error {
 
 	result, err := h.refundUsecase.Execute(c.Context(), req)
 	if err != nil {
+		log.Error("refund failed", "order_id", orderID, "amount", reqPayload.Amount, "error", err.Error())
 		var appErr *domain.AppError
 		if errors.As(err, &appErr) {
 			return c.Status(appErr.HTTPStatus).JSON(h.factory.Error(requestID, appErr))
@@ -174,11 +189,14 @@ func (h *PaymentHandler) Refund(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(h.factory.Error(requestID, domain.NewInternalError(err)))
 	}
 
+	log.Info("refund initiated", "order_id", orderID, "refund_id", result.RefundID, "amount", reqPayload.Amount)
+
 	return c.Status(fiber.StatusCreated).JSON(h.factory.Success(requestID, "REFUND_INITIATED", "refund initiated successfully", result))
 }
 
 func (h *PaymentHandler) Cancel(c *fiber.Ctx) error {
 	requestID, _ := c.Locals("request_id").(string)
+	log := logger.FromContext(c.UserContext())
 	orderID := c.Params("order_id")
 
 	if orderID == "" {
@@ -189,12 +207,15 @@ func (h *PaymentHandler) Cancel(c *fiber.Ctx) error {
 
 	err := h.cancelUsecase.Execute(c.Context(), orderID)
 	if err != nil {
+		log.Error("cancel failed", "order_id", orderID, "error", err.Error())
 		var appErr *domain.AppError
 		if errors.As(err, &appErr) {
 			return c.Status(appErr.HTTPStatus).JSON(h.factory.Error(requestID, appErr))
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(h.factory.Error(requestID, domain.NewInternalError(err)))
 	}
+
+	log.Info("transaction cancelled", "order_id", orderID)
 
 	return c.Status(fiber.StatusOK).JSON(h.factory.SuccessNoData(requestID, "CANCEL_SUCCESS", "transaction cancelled successfully"))
 }

@@ -43,8 +43,8 @@ func (m *MockOutboxRepository) Save(ctx context.Context, tx port.Tx, event *doma
 	return args.Error(0)
 }
 
-func (m *MockOutboxRepository) FindPendingEvents(ctx context.Context, limit int) ([]*domain.OutboxEvent, error) {
-	args := m.Called(ctx, limit)
+func (m *MockOutboxRepository) FindPendingEvents(ctx context.Context, tx port.Tx, limit int) ([]*domain.OutboxEvent, error) {
+	args := m.Called(ctx, tx, limit)
 	return args.Get(0).([]*domain.OutboxEvent), args.Error(1)
 }
 
@@ -124,7 +124,7 @@ func TestHandleWebhook_SettlementSuccess(t *testing.T) {
 
 	txManager.On("WithTx", mock.Anything).Return(nil)
 	webhookLogRepo.On("FindByMidtransTransactionIDAndStatus", mock.Anything, req.TransactionID, req.TransactionStatus).Return(nil, domain.NewNotFoundError("webhook_log", req.TransactionID))
-	trxRepo.On("FindByOrderID", mock.Anything, req.OrderID).Return(existingTrx, nil)
+	trxRepo.On("FindByOrderIDForUpdate", mock.Anything, mock.Anything, req.OrderID).Return(existingTrx, nil)
 	trxRepo.On("Update", mock.Anything, mock.Anything, mock.AnythingOfType("*domain.Transaction")).Return(nil)
 	webhookLogRepo.On("Save", mock.Anything, mock.Anything, mock.AnythingOfType("*domain.WebhookLog")).Return(nil)
 	outboxRepo.On("Save", mock.Anything, mock.Anything, mock.AnythingOfType("*domain.OutboxEvent")).Return(nil)

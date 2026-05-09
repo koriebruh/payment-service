@@ -12,11 +12,12 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name     string `env:"APP_NAME" envDefault:"payment-service"`
-	Env      string `env:"APP_ENV" envDefault:"development"`
-	Port     int    `env:"APP_PORT" envDefault:"8080"`
-	LogLevel string `env:"LOG_LEVEL" envDefault:"DEBUG"`
-	Version  string `env:"APP_VERSION" envDefault:"v1"`
+	Name        string `env:"APP_NAME" envDefault:"payment-service"`
+	Env         string `env:"APP_ENV" envDefault:"development"`
+	Port        int    `env:"APP_PORT" envDefault:"8080"`
+	LogLevel    string `env:"LOG_LEVEL" envDefault:"DEBUG"`
+	LogFilePath string `env:"LOG_FILE_PATH" envDefault:""`
+	Version     string `env:"APP_VERSION" envDefault:"v1"`
 }
 
 type DBConfig struct {

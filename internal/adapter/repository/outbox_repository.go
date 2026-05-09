@@ -22,10 +22,13 @@ func (r *outboxRepository) Save(ctx context.Context, tx port.Tx, event *domain.O
 	return db.WithContext(ctx).Create(event).Error
 }
 
-func (r *outboxRepository) FindPendingEvents(ctx context.Context, limit int) ([]*domain.OutboxEvent, error) {
+func (r *outboxRepository) FindPendingEvents(ctx context.Context, tx port.Tx, limit int) ([]*domain.OutboxEvent, error) {
+	db := GetGormDB(r.db, tx)
 	var events []*domain.OutboxEvent
 	// Order by created_at to process oldest first
-	err := r.db.WithContext(ctx).
+	// Use FOR UPDATE SKIP LOCKED to prevent race conditions across multiple instances
+	err := db.WithContext(ctx).
+		Set("gorm:query_option", "FOR UPDATE SKIP LOCKED").
 		Where("status = ?", domain.OutboxStatusPending).
 		Order("created_at ASC").
 		Limit(limit).

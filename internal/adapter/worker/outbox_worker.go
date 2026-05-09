@@ -51,45 +51,46 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 }
 
 func (w *OutboxWorker) processPendingEvents(ctx context.Context) {
-	events, err := w.outboxRepo.FindPendingEvents(ctx, 50)
-	if err != nil {
-		slog.Error("Failed to fetch pending outbox events", "error", err)
-		return
-	}
-
-	if len(events) == 0 {
-		return
-	}
-
-	var publishedIDs []string
-
-	for _, evt := range events {
-		var envelope domain.EventEnvelope
-		if err := json.Unmarshal(evt.Payload, &envelope); err != nil {
-			slog.Error("Failed to unmarshal event payload", "event_id", evt.ID, "error", err)
-			_ = w.txManager.WithTx(ctx, func(tx port.Tx) error {
-				return w.outboxRepo.MarkAsFailed(ctx, tx, evt.ID)
-			})
-			continue
+	_ = w.txManager.WithTx(ctx, func(tx port.Tx) error {
+		events, err := w.outboxRepo.FindPendingEvents(ctx, tx, 50)
+		if err != nil {
+			slog.Error("Failed to fetch pending outbox events", "error", err)
+			return err
 		}
 
-		// Publish to Kafka
-		if err := w.eventPublisher.Publish(ctx, w.cfg.Kafka.Topic, envelope); err != nil {
-			slog.Error("Failed to publish event", "event_id", evt.ID, "error", err)
-			continue // Retry next tick
+		if len(events) == 0 {
+			return nil
 		}
 
-		publishedIDs = append(publishedIDs, evt.ID)
-	}
+		var publishedIDs []string
 
-	// Batch update status to published
-	if len(publishedIDs) > 0 {
-		_ = w.txManager.WithTx(ctx, func(tx port.Tx) error {
+		for _, evt := range events {
+			var envelope domain.EventEnvelope
+			if err := json.Unmarshal(evt.Payload, &envelope); err != nil {
+				slog.Error("Failed to unmarshal event payload", "event_id", evt.ID, "error", err)
+				if markErr := w.outboxRepo.MarkAsFailed(ctx, tx, evt.ID); markErr != nil {
+					slog.Error("Failed to mark event as failed", "event_id", evt.ID, "error", markErr)
+				}
+				continue
+			}
+
+			// Publish to Kafka
+			if err := w.eventPublisher.Publish(ctx, w.cfg.Kafka.Topic, envelope); err != nil {
+				slog.Error("Failed to publish event", "event_id", evt.ID, "error", err)
+				continue // Retry next tick, lock will be released on commit
+			}
+
+			publishedIDs = append(publishedIDs, evt.ID)
+		}
+
+		// Batch update status to published
+		if len(publishedIDs) > 0 {
 			if err := w.outboxRepo.MarkAsPublished(ctx, tx, publishedIDs); err != nil {
 				slog.Error("Failed to mark events as published", "error", err)
 				return err
 			}
-			return nil
-		})
-	}
+		}
+
+		return nil
+	})
 }

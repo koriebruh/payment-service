@@ -9,6 +9,7 @@ import (
 	"github.com/koriebruh/payment-service/internal/domain"
 	usecase_dto "github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
+	"github.com/koriebruh/payment-service/pkg/logger"
 	"github.com/koriebruh/payment-service/pkg/response"
 )
 
@@ -26,6 +27,7 @@ func NewWebhookHandler(usecase port.HandleMidtransWebhookUsecase, factory *respo
 
 func (h *WebhookHandler) MidtransCallback(c *fiber.Ctx) error {
 	requestID, _ := c.Locals("request_id").(string)
+	log := logger.FromContext(c.UserContext())
 
 	var reqDTO dto.WebhookRequestDTO
 	if err := c.BodyParser(&reqDTO); err != nil {
@@ -47,21 +49,36 @@ func (h *WebhookHandler) MidtransCallback(c *fiber.Ctx) error {
 		RawPayload:        rawPayload,
 	}
 
+	log.Info("webhook received",
+		"order_id", reqDTO.OrderID,
+		"midtrans_status", reqDTO.TransactionStatus,
+		"midtrans_txn_id", reqDTO.TransactionID,
+	)
+
 	err := h.webhookUsecase.Execute(c.Context(), req)
 	if err != nil {
 		var appErr *domain.AppError
 		if errors.As(err, &appErr) {
 			if errors.Is(err, domain.ErrInvalidSignature) {
-				// Midtrans documentation says we should return 200 even for invalid signature
-				// to stop midtrans from retrying, but logging it as unauthorized internally.
-				// For safety, we return 401 as an example unless stated otherwise
+				log.Warn("webhook rejected: invalid signature",
+					"order_id", reqDTO.OrderID,
+					"midtrans_txn_id", reqDTO.TransactionID,
+				)
 				return c.Status(fiber.StatusOK).JSON(h.factory.Error(requestID, appErr))
 			}
 			return c.Status(appErr.HTTPStatus).JSON(h.factory.Error(requestID, appErr))
 		}
-		// Return 500 so midtrans retries
+		log.Error("webhook processing failed",
+			"order_id", reqDTO.OrderID,
+			"error", err.Error(),
+		)
 		return c.Status(fiber.StatusInternalServerError).JSON(h.factory.Error(requestID, domain.NewInternalError(err)))
 	}
+
+	log.Info("webhook processed",
+		"order_id", reqDTO.OrderID,
+		"midtrans_status", reqDTO.TransactionStatus,
+	)
 
 	return c.Status(fiber.StatusOK).JSON(h.factory.SuccessNoData(requestID, "WEBHOOK_PROCESSED", "webhook processed successfully"))
 }

@@ -18,6 +18,7 @@ type TxManager interface {
 type TransactionRepository interface {
 	FindByID(ctx context.Context, id string) (*domain.Transaction, error)
 	FindByOrderID(ctx context.Context, orderID string) (*domain.Transaction, error)
+	FindByOrderIDForUpdate(ctx context.Context, tx Tx, orderID string) (*domain.Transaction, error) // pessimistic lock
 	FindAll(ctx context.Context, customerID string, limit, offset int) ([]*domain.Transaction, int64, error)
 	Save(ctx context.Context, tx Tx, t *domain.Transaction) error
 	Update(ctx context.Context, tx Tx, t *domain.Transaction) error
@@ -40,7 +41,7 @@ type EventPublisher interface {
 
 type OutboxRepository interface {
 	Save(ctx context.Context, tx Tx, event *domain.OutboxEvent) error
-	FindPendingEvents(ctx context.Context, limit int) ([]*domain.OutboxEvent, error)
+	FindPendingEvents(ctx context.Context, tx Tx, limit int) ([]*domain.OutboxEvent, error)
 	MarkAsPublished(ctx context.Context, tx Tx, ids []string) error
 	MarkAsFailed(ctx context.Context, tx Tx, id string) error
 }

@@ -41,6 +41,23 @@ func (r *transactionRepository) FindByOrderID(ctx context.Context, orderID strin
 	return &t, nil
 }
 
+func (r *transactionRepository) FindByOrderIDForUpdate(ctx context.Context, tx port.Tx, orderID string) (*domain.Transaction, error) {
+	db := GetGormDB(r.db, tx)
+	var t domain.Transaction
+	// SELECT ... FOR UPDATE — pessimistic lock to prevent concurrent webhook processing
+	err := db.WithContext(ctx).
+		Set("gorm:query_option", "FOR UPDATE").
+		Where("order_id = ?", orderID).
+		First(&t).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, domain.ErrTransactionNotFound
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
 func (r *transactionRepository) FindAll(ctx context.Context, customerID string, limit, offset int) ([]*domain.Transaction, int64, error) {
 	var transactions []*domain.Transaction
 	var totalCount int64

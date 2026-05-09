@@ -13,6 +13,9 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - REDIS_HOST=redis
       - OTEL_ENDPOINT=otel-collector:4317
+      - LOG_FILE_PATH=/app/logs/payment-service.log
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
