@@ -31,7 +31,7 @@ jobs:
       - name: Run Linter
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.56
+          version: v1.61
 
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
