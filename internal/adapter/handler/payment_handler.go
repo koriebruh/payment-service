@@ -46,6 +46,7 @@ func NewPaymentHandler(
 
 func (h *PaymentHandler) Charge(c *fiber.Ctx) error {
 	requestID, _ := c.Locals("request_id").(string)
+	traceID, _ := c.Locals("trace_id").(string)
 	log := logger.FromContext(c.UserContext())
 
 	var reqDTO dto.ChargeRequestDTO
@@ -79,7 +80,7 @@ func (h *PaymentHandler) Charge(c *fiber.Ctx) error {
 		Currency:        reqDTO.Currency,
 		IdempotencyKey:  reqDTO.IdempotencyKey,
 		RequestID:       requestID,
-		TraceID:         requestID,
+		TraceID:         traceID,
 	}
 
 	result, err := h.chargeUsecase.Execute(c.Context(), req)

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/koriebruh/payment-service/config"
 	"github.com/koriebruh/payment-service/internal/domain"
 	"github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
@@ -64,13 +63,7 @@ func TestHandleWebhook_InvalidSignature(t *testing.T) {
 	webhookLogRepo := new(MockWebhookLogRepository)
 	outboxRepo := new(MockOutboxRepository)
 
-	cfg := &config.Config{
-		Midtrans: config.MidtransConfig{
-			ServerKey: "secret-key",
-		},
-	}
-
-	usecase := NewHandleMidtransWebhookUsecase(txManager, trxRepo, webhookLogRepo, outboxRepo, cfg)
+	usecase := NewHandleMidtransWebhookUsecase(txManager, trxRepo, webhookLogRepo, outboxRepo, "secret-key")
 
 	req := dto.WebhookPayload{
 		OrderID:       "order-1",
@@ -94,13 +87,7 @@ func TestHandleWebhook_SettlementSuccess(t *testing.T) {
 	webhookLogRepo := new(MockWebhookLogRepository)
 	outboxRepo := new(MockOutboxRepository)
 
-	cfg := &config.Config{
-		Midtrans: config.MidtransConfig{
-			ServerKey: "secret-key",
-		},
-	}
-
-	usecase := NewHandleMidtransWebhookUsecase(txManager, trxRepo, webhookLogRepo, outboxRepo, cfg)
+	usecase := NewHandleMidtransWebhookUsecase(txManager, trxRepo, webhookLogRepo, outboxRepo, "secret-key")
 
 	// Calculate valid signature
 	payload := "order-1" + "200" + "10000.00" + "secret-key"

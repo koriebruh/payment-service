@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"go.opentelemetry.io/otel"
 
@@ -55,7 +56,9 @@ func (u *getTransactionStatusUsecase) Execute(ctx context.Context, orderID strin
 	// Parse Payment Details
 	var paymentDetails map[string]interface{}
 	if len(trx.MidtransResponse) > 0 {
-		_ = json.Unmarshal(trx.MidtransResponse, &paymentDetails)
+		if err := json.Unmarshal(trx.MidtransResponse, &paymentDetails); err != nil {
+			slog.Warn("failed to unmarshal midtrans response", "order_id", trx.OrderID, "error", err)
+		}
 		// Clean up unnecessary raw fields if desired, or return as is
 	}
 

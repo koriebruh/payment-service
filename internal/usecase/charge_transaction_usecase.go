@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -104,11 +105,13 @@ func (u *chargeTransactionUsecase) Execute(ctx context.Context, req dto.ChargeRe
 	// 5. Cache result for idempotency replay
 	if u.idempotencyStore != nil && req.IdempotencyKey != "" {
 		if resultBytes, jsonErr := json.Marshal(result); jsonErr == nil {
-			_ = u.idempotencyStore.Set(ctx, req.IdempotencyKey, idempotency.IdempotencyRecord{
+			if err := u.idempotencyStore.Set(ctx, req.IdempotencyKey, idempotency.IdempotencyRecord{
 				Key:        req.IdempotencyKey,
 				StatusCode: 201,
 				Response:   resultBytes,
-			}, idempotencyTTL)
+			}, idempotencyTTL); err != nil {
+				slog.Warn("failed to set idempotency record", "key", req.IdempotencyKey, "error", err)
+			}
 		}
 	}
 

@@ -51,7 +51,7 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 }
 
 func (w *OutboxWorker) processPendingEvents(ctx context.Context) {
-	_ = w.txManager.WithTx(ctx, func(tx port.Tx) error {
+	if err := w.txManager.WithTx(ctx, func(tx port.Tx) error {
 		events, err := w.outboxRepo.FindPendingEvents(ctx, tx, 50)
 		if err != nil {
 			slog.Error("Failed to fetch pending outbox events", "error", err)
@@ -92,5 +92,7 @@ func (w *OutboxWorker) processPendingEvents(ctx context.Context) {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		slog.Error("OutboxWorker processPendingEvents tx error", "error", err)
+	}
 }

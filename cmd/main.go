@@ -111,7 +111,7 @@ func main() {
 
 	// 8. Init usecases
 	chargeUsecase := usecase.NewChargeTransactionUsecase(txManager, trxRepo, midtransClient, idempotencyStore)
-	webhookUsecase := usecase.NewHandleMidtransWebhookUsecase(txManager, trxRepo, webhookRepo, outboxRepo, cfg)
+	webhookUsecase := usecase.NewHandleMidtransWebhookUsecase(txManager, trxRepo, webhookRepo, outboxRepo, cfg.Midtrans.ServerKey)
 	getStatusUsecase := usecase.NewGetTransactionStatusUsecase(trxRepo, refundRepo)
 	refundUsecase := usecase.NewRefundTransactionUsecase(txManager, trxRepo, refundRepo, midtransClient, idempotencyStore)
 	cancelUsecase := usecase.NewCancelTransactionUsecase(txManager, trxRepo, midtransClient)

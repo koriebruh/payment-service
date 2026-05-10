@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"log/slog"
 
 	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
@@ -42,13 +43,17 @@ func (m *gormTxManager) WithTx(ctx context.Context, fn func(tx port.Tx) error) e
 
 	defer func() {
 		if r := recover(); r != nil {
-			_ = tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				slog.Error("tx rollback failed during panic recover", "error", rollbackErr)
+			}
 			panic(r)
 		}
 	}()
 
 	if err := fn(tx); err != nil {
-		_ = tx.Rollback()
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			slog.Error("tx rollback failed", "error", rollbackErr)
+		}
 		return err
 	}
 

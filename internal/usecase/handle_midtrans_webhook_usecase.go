@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 
-	"github.com/koriebruh/payment-service/config"
 	"github.com/koriebruh/payment-service/internal/domain"
 	"github.com/koriebruh/payment-service/internal/usecase/dto"
 	"github.com/koriebruh/payment-service/internal/usecase/port"
@@ -23,7 +22,7 @@ type handleMidtransWebhookUsecase struct {
 	transactionRepo port.TransactionRepository
 	webhookLogRepo  port.WebhookLogRepository
 	outboxRepo      port.OutboxRepository
-	cfg             *config.Config
+	serverKey       string
 }
 
 func NewHandleMidtransWebhookUsecase(
@@ -31,14 +30,14 @@ func NewHandleMidtransWebhookUsecase(
 	transactionRepo port.TransactionRepository,
 	webhookLogRepo port.WebhookLogRepository,
 	outboxRepo port.OutboxRepository,
-	cfg *config.Config,
+	serverKey string,
 ) port.HandleMidtransWebhookUsecase {
 	return &handleMidtransWebhookUsecase{
 		txManager:       txManager,
 		transactionRepo: transactionRepo,
 		webhookLogRepo:  webhookLogRepo,
 		outboxRepo:      outboxRepo,
-		cfg:             cfg,
+		serverKey:       serverKey,
 	}
 }
 
@@ -69,9 +68,11 @@ func (u *handleMidtransWebhookUsecase) Execute(ctx context.Context, req dto.Webh
 			"order_id", req.OrderID,
 			"midtrans_txn_id", req.TransactionID,
 		)
-		_ = u.txManager.WithTx(ctx, func(tx port.Tx) error {
+		if logErr := u.txManager.WithTx(ctx, func(tx port.Tx) error {
 			return u.webhookLogRepo.Save(ctx, tx, webhookLog)
-		})
+		}); logErr != nil {
+			slog.Error("failed to save invalid webhook log", "error", logErr)
+		}
 		return domain.ErrInvalidSignature
 	}
 
@@ -150,7 +151,7 @@ func (u *handleMidtransWebhookUsecase) Execute(ctx context.Context, req dto.Webh
 }
 
 func (u *handleMidtransWebhookUsecase) validateSignature(orderID, statusCode, grossAmount, signatureKey string) bool {
-	payload := orderID + statusCode + grossAmount + u.cfg.Midtrans.ServerKey
+	payload := orderID + statusCode + grossAmount + u.serverKey
 	hash := sha512.Sum512([]byte(payload))
 	hashStr := hex.EncodeToString(hash[:])
 	return hashStr == signatureKey

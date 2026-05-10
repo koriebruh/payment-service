@@ -1,4 +1,4 @@
-.PHONY: run build test migrate-up migrate-down docker-up docker-down
+.PHONY: run build test test-base test-race migrate-up migrate-down docker-up docker-down
 
 # Local execution
 run:
@@ -7,10 +7,18 @@ run:
 build:
 	CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o payment-service ./cmd/main.go
 
-test:
+# Default test (menggunakan race detector)
+test: test-race
+
+# Test standar tanpa race detector (tidak butuh GCC/CGO)
+test-base:
 	go test -v ./...
 
-# Migrations (requires golang-migrate CLI installed locally)
+# Test dengan race detector (memaksa CGO_ENABLED=1)
+test-race:
+	CGO_ENABLED=1 go test -v -race ./...
+
+# Migrations
 DB_URL="postgres://payment_user:payment_password@localhost:5432/payment_db?sslmode=disable"
 
 migrate-up:

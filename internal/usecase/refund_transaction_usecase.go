@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -99,9 +100,11 @@ func (u *refundTransactionUsecase) Execute(ctx context.Context, req dto.RefundRe
 	}
 
 	// Update refund status
-	_ = u.txManager.WithTx(ctx, func(tx port.Tx) error {
+	if updateErr := u.txManager.WithTx(ctx, func(tx port.Tx) error {
 		return u.refundRepo.Update(ctx, tx, refund)
-	})
+	}); updateErr != nil {
+		slog.Error("failed to update refund status", "refund_id", refund.ID, "error", updateErr)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("refundTransactionUsecase: gateway error: %w", err)
@@ -117,11 +120,13 @@ func (u *refundTransactionUsecase) Execute(ctx context.Context, req dto.RefundRe
 
 	if req.IdempotencyKey != "" && u.idempotencyStore != nil {
 		respBytes, _ := json.Marshal(res)
-		_ = u.idempotencyStore.Set(ctx, req.IdempotencyKey, idempotency.IdempotencyRecord{
+		if setErr := u.idempotencyStore.Set(ctx, req.IdempotencyKey, idempotency.IdempotencyRecord{
 			Key:        req.IdempotencyKey,
 			StatusCode: 201,
 			Response:   respBytes,
-		}, 24*time.Hour)
+		}, 24*time.Hour); setErr != nil {
+			slog.Warn("failed to set refund idempotency record", "key", req.IdempotencyKey, "error", setErr)
+		}
 	}
 
 	return res, nil
