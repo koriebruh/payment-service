@@ -1,8 +1,9 @@
 package domain
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand/v2"
+	"math/big"
 	"time"
 )
 
@@ -30,6 +31,8 @@ type Refund struct {
 // Pattern: REF/{YYYYMMDD}/{4-digit-random}
 // Example: REF/20260506/4821
 func GenerateRefundID(t time.Time) string {
-	seq := rand.IntN(9000) + 1000 // always 4 digits: 1000–9999
+	maxVal := big.NewInt(9000)
+	n, _ := rand.Int(rand.Reader, maxVal)
+	seq := n.Int64() + 1000 // always 4 digits: 1000–9999
 	return fmt.Sprintf("REF/%s/%04d", t.Format("20060102"), seq)
 }

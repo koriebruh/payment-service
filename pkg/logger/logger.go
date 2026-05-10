@@ -39,8 +39,8 @@ func New(cfg *config.AppConfig) *slog.Logger {
 	var w io.Writer = os.Stdout
 	if cfg.LogFilePath != "" {
 		dir := filepath.Dir(cfg.LogFilePath)
-		if err := os.MkdirAll(dir, 0o755); err == nil {
-			f, err := os.OpenFile(cfg.LogFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err := os.MkdirAll(dir, 0o750); err == nil {
+			f, err := os.OpenFile(cfg.LogFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 			if err == nil {
 				w = io.MultiWriter(os.Stdout, f)
 			}

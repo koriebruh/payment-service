@@ -1,8 +1,9 @@
 package domain
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand/v2"
+	"math/big"
 	"time"
 )
 
@@ -41,7 +42,9 @@ type Transaction struct {
 // Pattern: INV/{YYYYMMDD}/TRX-{6-digit-random}
 // Example: INV/20260506/TRX-004821
 func GenerateTransactionID(t time.Time) string {
-	seq := rand.IntN(900000) + 100000 // always 6 digits: 100000–999999
+	maxVal := big.NewInt(900000)
+	n, _ := rand.Int(rand.Reader, maxVal)
+	seq := n.Int64() + 100000 // always 6 digits: 100000–999999
 	return fmt.Sprintf("INV/%s/TRX-%06d", t.Format("20060102"), seq)
 }
 
