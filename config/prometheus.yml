@@ -10,7 +10,3 @@ scrape_configs:
   - job_name: 'postgres-exporter'
     static_configs:
       - targets: ['payment-service-postgres-exporter:9187']
-
-  - job_name: 'otel-collector'
-    static_configs:
-      - targets: ['payment-service-otel-collector:8889']

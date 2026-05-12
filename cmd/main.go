@@ -11,6 +11,7 @@ import (
 
 	"github.com/ansrivas/fiberprometheus/v2"
 	"github.com/go-playground/validator/v10"
+	"github.com/gofiber/contrib/otelfiber/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
@@ -137,9 +138,11 @@ func main() {
 	})
 
 	// Middleware order per GEMINI.md rule 16:
-	// 1. Recovery  2. RequestID+Logger  3. Prometheus  4. CORS
+	// 1. Recovery  2. OTEL 3. RequestID+Logger  4. Prometheus  5. CORS
 	app.Use(fiberrecover.New())
+	app.Use(otelfiber.Middleware())
 	app.Use(middleware.RequestLogger(logg))
+
 
 	prometheus := fiberprometheus.New(cfg.App.Name)
 	prometheus.RegisterAt(app, "/metrics")

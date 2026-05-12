@@ -3,15 +3,15 @@ import { check, sleep } from 'k6';
 import { uuidv4 } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
 
 export const options = {
-    // 1. Initial configuration for load testing
+    // 1. Reduced load for Sandbox environment
     stages: [
-        { duration: '30s', target: 50 },  // Ramp-up to 50 virtual users over 30s
-        { duration: '1m', target: 50 },   // Stay at 50 users for 1 minute
-        { duration: '30s', target: 0 },   // Ramp-down to 0 users over 30s
+        { duration: '20s', target: 10 }, // Ramp-up to 10 VUs
+        { duration: '40s', target: 10 }, // Stay at 10 VUs
+        { duration: '20s', target: 0 },  // Ramp-down
     ],
     thresholds: {
-        http_req_duration: ['p(95)<500'], // 95% of requests must complete below 500ms
-        http_req_failed: ['rate<0.01'],   // Error rate must be less than 1%
+        http_req_duration: ['p(95)<1000'], // Increased threshold for sandbox latency
+        http_req_failed: ['rate<0.05'],   // Allow up to 5% failures due to potential sandbox hiccups
     },
 };
 

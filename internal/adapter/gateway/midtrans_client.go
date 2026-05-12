@@ -83,8 +83,11 @@ func (m *midtransClient) CreateTransaction(ctx context.Context, t *domain.Transa
 
 	// Execute via Circuit Breaker
 	res, err := m.breaker.Execute(func() (interface{}, error) {
-		// Snap API doesn't accept context directly, but we use the global configured httpClient timeout
-		return m.snapClient.CreateTransaction(req)
+		resp, err := m.snapClient.CreateTransaction(req)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	})
 
 	if err != nil {
@@ -112,7 +115,11 @@ func (m *midtransClient) RefundTransaction(ctx context.Context, orderID string, 
 
 	// Execute via Circuit Breaker
 	res, err := m.breaker.Execute(func() (interface{}, error) {
-		return m.coreClient.RefundTransaction(orderID, req)
+		resp, err := m.coreClient.RefundTransaction(orderID, req)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	})
 
 	if err != nil {
@@ -132,7 +139,11 @@ func (m *midtransClient) RefundTransaction(ctx context.Context, orderID string, 
 func (m *midtransClient) CancelTransaction(ctx context.Context, orderID string) error {
 	// Execute via Circuit Breaker
 	_, err := m.breaker.Execute(func() (interface{}, error) {
-		return m.coreClient.CancelTransaction(orderID)
+		resp, err := m.coreClient.CancelTransaction(orderID)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	})
 
 	if err != nil {

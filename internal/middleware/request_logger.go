@@ -32,7 +32,7 @@ func RequestLogger(log *slog.Logger) fiber.Handler {
 			requestID = uuid.NewString()
 		}
 
-		// Extract trace_id from OTEL context if available
+		// Extract trace_id from OTEL context
 		span := trace.SpanFromContext(c.UserContext())
 		traceID := span.SpanContext().TraceID().String()
 
@@ -42,7 +42,7 @@ func RequestLogger(log *slog.Logger) fiber.Handler {
 
 		// Create request-scoped logger and store in context
 		reqLogger := log.With("request_id", requestID, "trace_id", traceID)
-		ctx := logger.WithContext(c.Context(), reqLogger)
+		ctx := logger.WithContext(c.UserContext(), reqLogger)
 		c.SetUserContext(ctx)
 
 		// Execute handler chain

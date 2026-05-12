@@ -13,7 +13,7 @@ services:
       - DB_HOST=payment-service-postgres
       - KAFKA_BROKERS=payment-service-kafka:9092
       - REDIS_HOST=payment-service-redis
-      - OTEL_ENDPOINT=payment-service-otel-collector:4317
+      - OTEL_ENDPOINT=payment-service-alloy:4317
       - LOG_FILE_PATH=/app/logs/payment-service.log
     volumes:
       - ./logs:/app/logs
@@ -85,36 +85,54 @@ services:
     networks:
       - payment-network
 
-  jaeger:
-    container_name: payment-service-jaeger
-    image: jaegertracing/all-in-one:1.55.0
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    ports:
-      - "16686:16686" # UI
-      # - "4317:4317"   # OTLP gRPC (Disabled to avoid conflict with otel-collector)
-      # - "4318:4318"   # OTLP HTTP (Disabled to avoid conflict with otel-collector)
-    networks:
-      - payment-network
-
-  otel-collector:
-    container_name: payment-service-otel-collector
-    image: otel/opentelemetry-collector-contrib:0.95.0
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+  alloy:
+    container_name: payment-service-alloy
+    image: grafana/alloy:v1.6.0
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
     volumes:
-      - ./config/otel-collector.yml:/etc/otelcol-contrib/config.yaml
+      - ./config/alloy-config.alloy:/etc/alloy/config.alloy
+      - ./logs:/var/log/app
     ports:
-      - "4317:4317" # OTLP gRPC receiver
-      - "4318:4318" # OTLP HTTP receiver
-      - "8889:8889" # Prometheus metrics exporter
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "12345:12345" # Alloy UI
     networks:
       - payment-network
     depends_on:
-      - jaeger
+      - tempo
+      - loki
+      - prometheus
+
+  tempo:
+    container_name: payment-service-tempo
+    image: grafana/tempo:2.8.0
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./config/tempo.yml:/etc/tempo.yaml
+    ports:
+      - "3200:3200" # Tempo HTTP
+    networks:
+      - payment-network
+
+  loki:
+    container_name: payment-service-loki
+    image: grafana/loki:3.3.0
+    command: [ "-config.file=/etc/loki/local-config.yaml" ]
+    volumes:
+      - ./config/loki.yml:/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    networks:
+      - payment-network
 
   prometheus:
     container_name: payment-service-prometheus
-    image: prom/prometheus:v2.51.0
+    image: prom/prometheus:v3.1.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-remote-write-receiver"
+      - "--web.enable-otlp-receiver"
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheusdata:/prometheus
@@ -127,11 +145,12 @@ services:
 
   grafana:
     container_name: payment-service-grafana
-    image: grafana/grafana:10.4.0
+    image: grafana/grafana:13.0.1
     ports:
       - "3000:3000"
     volumes:
       - grafanadata:/var/lib/grafana
+      - ./config/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -139,6 +158,8 @@ services:
       - payment-network
     depends_on:
       - prometheus
+      - tempo
+      - loki
 
   postgres-exporter:
     container_name: payment-service-postgres-exporter
